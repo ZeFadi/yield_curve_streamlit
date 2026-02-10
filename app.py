@@ -21,6 +21,23 @@ from portfolio import sample_portfolio_df, standardize_portfolio_df
 from pricing import price_portfolio_df, portfolio_pv
 from scenarios import apply_parallel_shock, apply_twist_shock, apply_key_rate_shock
 
+# PM Feature Modules
+from carry_rolldown import portfolio_carry_rolldown
+from relative_value import portfolio_z_spreads
+from risk_ladder import compute_dv01_ladder, portfolio_key_rate_durations
+from historical_scenarios import (
+    interpolate_scenario_shifts,
+    list_available_scenarios,
+    get_scenario_description,
+    HISTORICAL_SCENARIOS,
+)
+from pca_analysis import (
+    decompose_portfolio_pca_exposure,
+    interpret_pca_exposures,
+    get_default_pca_loadings,
+)
+from pnl_attribution import compute_pnl_attribution, format_pnl_report
+
 TREASURY_XML_BASE = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
 TREASURY_DATA_NOMINAL = "daily_treasury_yield_curve"
 TREASURY_FIELD_MAP = {
@@ -351,7 +368,15 @@ plot_resolution = st.sidebar.slider("Plot Resolution", min_value=100, max_value=
 
 # --- Main App Logic & Plotting ---
 
-tabs = st.tabs(["Curves", "Portfolio", "Scenarios"])
+tabs = st.tabs([
+    "Curves",
+    "Portfolio",
+    "Carry & Roll-Down",
+    "DV01 Ladder",
+    "Relative Value",
+    "Historical Stress",
+    "Scenarios"
+])
 
 with tabs[0]:
     col1, col2 = st.columns(2)
@@ -528,7 +553,270 @@ with tabs[1]:
                 }
             )
 
+
+# === TAB 3: CARRY & ROLL-DOWN ===
 with tabs[2]:
+    st.subheader("Carry & Roll-Down Analysis")
+    portfolio_state = st.session_state.get("portfolio_df")
+    if portfolio_state is None:
+        st.info("Load a portfolio in the Portfolio tab to analyze carry and roll-down.")
+    else:
+        valuation_date = st.session_state.get("valuation_date", date.today())
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            horizon_months = st.selectbox("Investment Horizon", [3, 6, 12], index=0)
+        with col2:
+            funding_rate = st.number_input("Funding Rate (%)", value=3.5, step=0.1, format="%.2f")
+        
+        carry_results = portfolio_carry_rolldown(
+            positions_df=portfolio_state,
+            curve_map=curve_map,
+            valuation_date=valuation_date,
+            method=interpolation_method,
+            horizon_months=horizon_months,
+            funding_rate_pct=funding_rate,
+            default_curve_id=selected_curve_id,
+        )
+        
+        st.markdown(f"#### Expected Returns Over {horizon_months} Months (Annualized)")
+        st.dataframe(
+            carry_results[[
+                "id", "issuer", "type", "notional",
+                "carry_ann_bps", "rolldown_ann_bps", "total_return_ann_bps"
+            ]].style.format({
+                "notional": "{:,.0f}",
+                "carry_ann_bps": "{:+.1f}",
+                "rolldown_ann_bps": "{:+.1f}",
+                "total_return_ann_bps": "{:+.1f}",
+            }),
+            width="stretch",
+        )
+        
+        total_carry = carry_results["carry"].sum()
+        total_roll = carry_results["rolldown"].sum()
+        total_expected = total_carry + total_roll
+        
+        st.markdown("#### Portfolio Totals")
+        summary_cols = st.columns(4)
+        summary_cols[0].metric("Total Carry", f"${total_carry:,.0f}")
+        summary_cols[1].metric("Total Roll-Down", f"${total_roll:,.0f}")
+        summary_cols[2].metric("Expected Return", f"${total_expected:,.0f}")
+        summary_cols[3].metric("Ann. Return (bps)", 
+                              f"{total_expected / carry_results['pv_now'].sum() / (horizon_months/12) * 10000:,.0f}")
+        
+        # Visualization
+        fig, ax = plt.subplots(figsize=(10, 6))
+        carry_results_sorted = carry_results.sort_values("total_return_ann_bps", ascending=True)
+        y_pos = np.arange(len(carry_results_sorted))
+        
+        ax.barh(y_pos, carry_results_sorted["carry_ann_bps"], label="Carry", color="steelblue")
+        ax.barh(y_pos, carry_results_sorted["rolldown_ann_bps"],
+                left=carry_results_sorted["carry_ann_bps"], label="Roll-Down", color="orange")
+        
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(carry_results_sorted["id"])
+        ax.set_xlabel("Annualized Return (bps)")
+        ax.set_title(f"{horizon_months}-Month Carry + Roll-Down by Bond")
+        ax.legend()
+        ax.axvline(0, color='black', linewidth=0.5)
+        ax.grid(True, alpha=0.3, axis='x')
+        st.pyplot(fig)
+
+# === TAB 4: DV01 LADDER ===
+with tabs[3]:
+    st.subheader("DV01 Ladder & Curve Exposure")
+    portfolio_state = st.session_state.get("portfolio_df")
+    if portfolio_state is None:
+        st.info("Load a portfolio in the Portfolio tab to see DV01 bucketing.")
+    else:
+        valuation_date = st.session_state.get("valuation_date", date.today())
+        
+        ladder_df = compute_dv01_ladder(
+            positions_df=portfolio_state,
+            curve_map=curve_map,
+            valuation_date=valuation_date,
+            method=interpolation_method,
+            default_curve_id=selected_curve_id,
+        )
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.markdown("#### DV01 by Maturity Bucket")
+            st.dataframe(
+                ladder_df.style.format({
+                    "dv01": "{:,.2f}",
+                    "pct_of_total": "{:.1f}%",
+                    "cumulative_pct": "{:.1f}%",
+                }),
+                width="stretch",
+            )
+        
+        with col2:
+            st.markdown("#### Key Rate Durations")
+            krd_df = portfolio_key_rate_durations(
+                positions_df=portfolio_state,
+                curve_map=curve_map,
+                valuation_date=valuation_date,
+                key_tenors=[2.0, 5.0, 10.0, 30.0],
+                method=interpolation_method,
+                default_curve_id=selected_curve_id,
+            )
+            st.dataframe(
+                krd_df.style.format({"tenor": "{:.0f}Y", "krd": "{:,.2f}"}),
+                width="stretch",
+            )
+        
+        # Visualization
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.barh(ladder_df["bucket"], ladder_df["pct_of_total"], color="darkblue")
+        ax.set_xlabel("% of Total DV01")
+        ax.set_title("Portfolio Curve Exposure (DV01 Distribution)")
+        ax.grid(True, alpha=0.3, axis='x')
+        
+        for i, (bucket, pct) in enumerate(zip(ladder_df["bucket"], ladder_df["pct_of_total"])):
+            ax.text(pct + 1, i, f"{pct:.1f}%", va='center', fontsize=10)
+        
+        st.pyplot(fig)
+
+# === TAB 5: RELATIVE VALUE ===
+with tabs[4]:
+    st.subheader("Relative Value: Z-Spread & Rich/Cheap Screening")
+    portfolio_state = st.session_state.get("portfolio_df")
+    if portfolio_state is None:
+        st.info("Load a portfolio in the Portfolio tab to perform relative value analysis.")
+    else:
+        valuation_date = st.session_state.get("valuation_date", date.today())
+        
+        rv_df = portfolio_z_spreads(
+            positions_df=portfolio_state,
+            curve_map=curve_map,
+            valuation_date=valuation_date,
+            method=interpolation_method,
+            default_curve_id=selected_curve_id,
+        )
+        
+        # Filter to bonds with market prices
+        has_price = rv_df["clean_price"].notna()
+        if has_price.sum() == 0:
+            st.warning("No bonds have market prices. Add `clean_price` column to portfolio data.")
+        else:
+            rv_display = rv_df[has_price].copy()
+            
+            st.markdown("#### Z-Spread Analysis")
+            st.dataframe(
+                rv_display[[
+                    "id", "issuer", "type", "duration", "model_spread_bps",
+                    "z_spread_bps", "fitted_spread", "residual_bps", "signal"
+                ]].style.format({
+                    "duration": "{:.2f}",
+                    "model_spread_bps": "{:.1f}",
+                    "z_spread_bps": "{:.1f}",
+                    "fitted_spread": "{:.1f}",
+                    "residual_bps": "{:+.1f}",
+                }).applymap(
+                    lambda val: "background-color: lightgreen" if val == "CHEAP" else
+                               ("background-color: lightcoral" if val == "RICH" else ""),
+                    subset=["signal"]
+                ),
+                width="stretch",
+            )
+            
+            # Scatter plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            cheap = rv_display[rv_display["signal"] == "CHEAP"]
+            fair = rv_display[rv_display["signal"] == "FAIR"]
+            rich = rv_display[rv_display["signal"] == "RICH"]
+            
+            if len(cheap) > 0:
+                ax.scatter(cheap["duration"], cheap["z_spread_bps"], 
+                          color="green", s=100, label="CHEAP", alpha=0.7, edgecolors="black")
+            if len(fair) > 0:
+                ax.scatter(fair["duration"], fair["z_spread_bps"],
+                          color="gray", s=100, label="FAIR", alpha=0.7, edgecolors="black")
+            if len(rich) > 0:
+                ax.scatter(rich["duration"], rich["z_spread_bps"],
+                          color="red", s=100, label="RICH", alpha=0.7, edgecolors="black")
+            
+            # Regression line
+            valid_for_fit = rv_display.dropna(subset=["z_spread_bps", "fitted_spread"])
+            if len(valid_for_fit) >= 2:
+                dur_sorted = np.sort(valid_for_fit["duration"].values)
+                fitted_sorted = valid_for_fit.set_index("duration").loc[dur_sorted, "fitted_spread"].values
+                ax.plot(dur_sorted, fitted_sorted, "b--", linewidth=2, label="Fitted Spread (OLS)")
+            
+            ax.set_xlabel("Duration")
+            ax.set_ylabel("Z-Spread (bps)")
+            ax.set_title("Z-Spread vs. Duration with Rich/Cheap Signals")
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+
+# === TAB 6: HISTORICAL STRESS ===
+with tabs[5]:
+    st.subheader("Historical Scenario Stress Testing")
+    portfolio_state = st.session_state.get("portfolio_df")
+    if portfolio_state is None:
+        st.info("Load a portfolio in the Portfolio tab to run historical scenarios.")
+    else:
+        valuation_date = st.session_state.get("valuation_date", date.today())
+        
+        scenario_list = list_available_scenarios()
+        selected_scenario = st.selectbox(
+            "Select Historical Scenario",
+            scenario_list,
+            format_func=lambda x: HISTORICAL_SCENARIOS[x]["name"]
+        )
+        
+        scenario_meta = get_scenario_description(selected_scenario)
+        st.info(f"**{scenario_meta['name']}**: {scenario_meta['description']}")
+        
+        # Apply scenario to curve
+        shocked_curve_df = interpolate_scenario_shifts(selected_scenario, cleaned_data)
+        shocked_curve_map = {
+            cid: _build_analyzer(group[["tenor", "rate"]], extrapolate=extrapolate)
+            for cid, group in shocked_curve_df.groupby("curve_id")
+        }
+        
+        # Base case PV
+        base_pv = portfolio_pv(
+            portfolio_state,
+            curve_map,
+            valuation_date=valuation_date,
+            method=interpolation_method,
+            default_curve_id=selected_curve_id,
+        )
+        
+        # Stressed PV
+        stressed_pv = portfolio_pv(
+            portfolio_state,
+            shocked_curve_map,
+            valuation_date=valuation_date,
+            method=interpolation_method,
+            spread_shock_bps=scenario_meta.get("spread_shock_bps", 0),
+            default_curve_id=selected_curve_id,
+        )
+        
+        pnl = stressed_pv - base_pv
+        pnl_pct = (pnl / base_pv * 100) if base_pv != 0 else 0.0
+        
+        # Display results
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Base PV", f"${base_pv:,.0f}")
+        col2.metric("Stressed PV", f"${stressed_pv:,.0f}")
+        col3.metric("P&L", f"${pnl:,.0f}", f"{pnl_pct:+.2f}%")
+        
+        st.markdown("#### Scenario Details")
+        shock_summary = pd.DataFrame([
+            {"Tenor": f"{t}Y", "Rate Shift (bps)": s}
+            for t, s in scenario_meta["moves"].items()
+        ])
+        st.dataframe(shock_summary, width="stretch")
+
+# === TAB 7: SCENARIOS (existing) ===
+with tabs[6]:
     st.subheader("Scenario Analysis")
     portfolio_state = st.session_state.get("portfolio_df")
     if portfolio_state is None:
