@@ -7,9 +7,8 @@ These scenarios are calibrated from actual market moves and capture
 realistic correlations across the curve (vs. arbitrary parallel shifts).
 """
 
-from __future__ import annotations
-
 from typing import Dict, List
+import numpy as np
 import pandas as pd
 
 

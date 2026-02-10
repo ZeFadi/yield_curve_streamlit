@@ -18,8 +18,6 @@ Day Count Convention:
     Years-to-maturity uses ACT/365.25 for duration-like metrics.
 """
 
-from __future__ import annotations
-
 from datetime import date
 
 import numpy as np

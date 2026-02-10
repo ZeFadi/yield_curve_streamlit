@@ -23,13 +23,11 @@ Methodology:
     Residual  = Total - (Carry + Roll + Rate + Spread)
 """
 
-from __future__ import annotations
-
 from datetime import date
 
 import pandas as pd
 
-from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod
+from yield_curve_analyzer import InterpolationMethod
 from pricing import price_bond, portfolio_pv, _resolve_curve
 from carry_rolldown import _coupons_in_period
 

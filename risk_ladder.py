@@ -16,12 +16,9 @@ Day Count Convention:
     Years-to-maturity uses ACT/365.25 for bucketing purposes.
 """
 
-from __future__ import annotations
-
 from datetime import date
 from typing import List, Tuple
 
-import numpy as np
 import pandas as pd
 
 from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod

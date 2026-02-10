@@ -21,7 +21,6 @@ from portfolio import sample_portfolio_df, standardize_portfolio_df
 from pricing import price_portfolio_df, portfolio_pv
 from scenarios import apply_parallel_shock, apply_twist_shock, apply_key_rate_shock
 
-# PM Feature Modules
 from carry_rolldown import portfolio_carry_rolldown
 from relative_value import portfolio_z_spreads
 from risk_ladder import compute_dv01_ladder, portfolio_key_rate_durations
@@ -31,12 +30,6 @@ from historical_scenarios import (
     get_scenario_description,
     HISTORICAL_SCENARIOS,
 )
-from pca_analysis import (
-    decompose_portfolio_pca_exposure,
-    interpret_pca_exposures,
-    get_default_pca_loadings,
-)
-from pnl_attribution import compute_pnl_attribution, format_pnl_report
 
 TREASURY_XML_BASE = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
 TREASURY_DATA_NOMINAL = "daily_treasury_yield_curve"

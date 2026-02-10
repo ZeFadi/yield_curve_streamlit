@@ -16,12 +16,8 @@ Day Count Convention:
     ACT/ACT ISDA, etc.).
 """
 
-from __future__ import annotations
-
 from datetime import date, timedelta
-from typing import Tuple
 
-import numpy as np
 import pandas as pd
 
 from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod

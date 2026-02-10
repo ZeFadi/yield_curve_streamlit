@@ -11,10 +11,6 @@ which typically explain 95%+ of total variance.
 - Curvature: Butterfly (belly vs. wings) (PC3, ~1-3%)
 """
 
-from __future__ import annotations
-
-from typing import Tuple
-import numpy as np
 import pandas as pd
 
 
