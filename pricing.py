@@ -10,6 +10,21 @@ import pandas as pd
 from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod
 
 
+def _resolve_curve(curve_map: dict, curve_id: str | None, default_curve_id: str | None) -> YieldCurveAnalyzer:
+    curve = curve_map.get(curve_id)
+    if curve is not None:
+        return curve
+    if default_curve_id is not None:
+        curve = curve_map.get(default_curve_id)
+        if curve is not None:
+            return curve
+    available = ", ".join(sorted(map(str, curve_map.keys())))
+    raise ValueError(
+        f"No curve found for curve_id='{curve_id}' and default_curve_id='{default_curve_id}'. "
+        f"Available curve IDs: [{available}]"
+    )
+
+
 @dataclass(frozen=True)
 class BondPricingResult:
     pv: float
@@ -214,10 +229,9 @@ def price_portfolio_df(
     rows = []
     for row in positions_df.itertuples(index=False):
         curve_id = getattr(row, "curve_id", default_curve_id) or default_curve_id
-        curve = curve_map.get(curve_id)
-        if curve is None:
-            curve = curve_map.get(default_curve_id)
+        if curve_id not in curve_map:
             warnings.append(f"Missing curve '{curve_id}', using '{default_curve_id}'.")
+        curve = _resolve_curve(curve_map, curve_id, default_curve_id)
 
         settlement = getattr(row, "settlement_date", valuation_date)
         if pd.isna(settlement):
@@ -275,9 +289,7 @@ def portfolio_pv(
     total = 0.0
     for row in positions_df.itertuples(index=False):
         curve_id = getattr(row, "curve_id", default_curve_id) or default_curve_id
-        curve = curve_map.get(curve_id)
-        if curve is None:
-            curve = curve_map.get(default_curve_id)
+        curve = _resolve_curve(curve_map, curve_id, default_curve_id)
 
         settlement = getattr(row, "settlement_date", valuation_date)
         if pd.isna(settlement):

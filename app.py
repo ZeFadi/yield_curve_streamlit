@@ -41,10 +41,10 @@ TREASURY_FIELD_MAP = {
     "BC_30YEAR": 30,
 }
 
-st.set_page_config(layout="wide", page_title="Yield Curve & Portfolio Manager", page_icon="📈")
+st.set_page_config(layout="wide", page_title="Yield Curve & Portfolio Manager")
 
 # --- UI Elements ---
-st.title("📈 Yield Curve & Portfolio Manager")
+st.title("Yield Curve & Portfolio Manager")
 st.markdown("""
 This application provides a professional interface for yield curve construction, portfolio pricing,
 and deterministic stress testing across sovereign and corporate bonds.
@@ -55,7 +55,7 @@ st.info(
     "If you have par yields or swap rates, bootstrap zero rates first."
 )
 
-st.sidebar.title("🛠️ Controls")
+st.sidebar.title("Controls")
 st.sidebar.header("1. Market Data")
 
 
@@ -234,8 +234,7 @@ elif data_source == "US Treasury (Daily)":
     st.sidebar.caption("Official U.S. Treasury daily par yield curve (nominal).")
     st.sidebar.warning(
         "Treasury data are par yields. This demo treats them as zero rates; "
-        "for production, bootstrap zeros from par yields.",
-        icon="⚠️",
+        "for production, bootstrap zeros from par yields."
     )
     use_latest = st.sidebar.checkbox("Use latest available", value=True)
     target_date = None
@@ -656,4 +655,4 @@ with tabs[2]:
                 width="stretch",
             )
 
-st.info("This is a demonstration application. For financial decisions, always consult with a qualified professional.", icon="⚠️")
+st.info("This is a demonstration application. For financial decisions, always consult with a qualified professional.")

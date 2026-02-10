@@ -1,4 +1,4 @@
-# 📈 Yield Curve & Portfolio Manager
+# Yield Curve & Portfolio Manager
 
 **Application professionnelle d'analyse de courbes de taux et de gestion de portefeuille obligataire**
 
@@ -6,7 +6,7 @@
 
 ---
 
-## 📐 Fondements Mathématiques
+## Fondements Mathématiques
 
 ### 1. Courbe des Taux Zéro-Coupon
 
@@ -37,7 +37,7 @@ $$F(5, 10) = \frac{R(10) \times 10 - R(5) \times 5}{10 - 5}$$
 
 ---
 
-## 🔬 Méthodes d'Interpolation
+## Méthodes d'Interpolation
 
 ### Spline Cubique Naturelle (Continuité C²)
 
@@ -68,7 +68,7 @@ $$\text{Si } \Delta_i = \frac{y_{i+1} - y_i}{x_{i+1} - x_i} \text{ et } \Delta_{
 
 ---
 
-## 💰 Pricing Obligataire
+## Pricing Obligataire
 
 ### Valeur Actuelle (PV)
 
@@ -90,7 +90,7 @@ $$AI = C \times \frac{\text{Jours depuis dernier coupon}}{\text{Jours dans la p�
 
 ---
 
-## 📊 Métriques de Risque
+## Métriques de Risque
 
 ### Duration Modifiée
 
@@ -120,7 +120,7 @@ $$CS01 = \frac{PV_{s-1bp} - PV_{s+1bp}}{2}$$
 
 ---
 
-## 🎯 Scénarios de Stress Test
+## Scénarios de Stress Test
 
 ### 1. Choc Parallèle
 
@@ -142,7 +142,7 @@ $$R'(t_k) = R(t_k) + \frac{\Delta_k}{100}$$
 
 ---
 
-## 🏗️ Architecture du Projet
+## Architecture du Projet
 
 ```
 yield_curve_streamlit/
@@ -167,7 +167,7 @@ yield_curve_streamlit/
 
 ---
 
-## 🚀 Installation et Lancement
+## Installation et Lancement
 
 ### Prérequis
 
@@ -199,7 +199,7 @@ L'application sera disponible sur `http://localhost:8501`
 
 ---
 
-## 📚 Utilisation
+## Utilisation
 
 ### 1. Chargement des Données de Marché
 
@@ -230,7 +230,7 @@ L'application supporte plusieurs sources de données :
 
 ---
 
-## 📋 Format des Données
+## Format des Données
 
 ### Courbe de Taux (CSV)
 
@@ -268,7 +268,7 @@ ACME_28,ACME Corp,corporate,USD,3000000,5.75,2,2028-08-15,UST,180
 
 ---
 
-## 🔧 Configuration Avancée
+## Configuration Avancée
 
 ### Variables d'Environnement
 
@@ -284,7 +284,7 @@ YC_DB_URL = "postgresql://user:password@host:port/database"
 
 ---
 
-## 📖 Références Théoriques
+## Références Théoriques
 
 1. **Interpolation de courbes** : Hagan, P.S. & West, G. (2006). *Interpolation Methods for Curve Construction*. Applied Mathematical Finance.
 
@@ -296,7 +296,7 @@ YC_DB_URL = "postgresql://user:password@host:port/database"
 
 ---
 
-## ⚠️ Avertissement
+## Avertissement
 
 Cette application est fournie à titre éducatif et de démonstration. Les données du Trésor américain importées sont des rendements "par" (par yields) et non des taux zéro - une étape de bootstrap serait nécessaire pour une utilisation en production.
 
@@ -304,10 +304,11 @@ Pour toute décision d'investissement, consultez un professionnel qualifié.
 
 ---
 
-## 📄 Licence
+## Licence
 
 Ce projet est distribué sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 
 ---
 
-*Développé avec ❤️ pour la finance quantitative*
+*Développé pour la finance quantitative*
+

@@ -8,6 +8,7 @@ import pandas as pd
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod
+from portfolio import standardize_portfolio_df
 from pricing import price_bond, bond_risk_metrics
 
 
@@ -62,3 +63,48 @@ def test_dv01_positive_for_bond():
         method=InterpolationMethod.PCHIP,
     )
     assert metrics.dv01 > 0
+
+
+def test_portfolio_standardize_defaults_blank_curve_id_to_base():
+    raw = pd.DataFrame(
+        {
+            "id": ["B1"],
+            "issuer": ["Issuer"],
+            "type": ["corporate"],
+            "currency": ["USD"],
+            "notional": [1000],
+            "coupon_rate": [5.0],
+            "coupon_freq": [2],
+            "maturity_date": ["2028-01-01"],
+            "curve_id": [""],
+            "spread_bps": [100.0],
+        }
+    )
+    cleaned, _ = standardize_portfolio_df(raw, date(2026, 1, 1))
+    assert cleaned.loc[0, "curve_id"] == "BASE"
+
+
+def test_portfolio_pv_raises_clear_error_when_curve_missing():
+    curve = _flat_curve(4.0)
+    positions = pd.DataFrame(
+        {
+            "id": ["B1"],
+            "issuer": ["Issuer"],
+            "type": ["corporate"],
+            "currency": ["USD"],
+            "curve_id": ["MISSING"],
+            "notional": [1000],
+            "coupon_rate": [5.0],
+            "coupon_freq": [2],
+            "maturity_date": [date(2028, 1, 1)],
+            "settlement_date": [date(2026, 1, 1)],
+            "spread_bps": [100.0],
+        }
+    )
+    from pricing import portfolio_pv
+
+    try:
+        portfolio_pv(positions, {"UST": curve}, date(2026, 1, 1), default_curve_id="BASE")
+        assert False, "Expected ValueError for missing curve resolution"
+    except ValueError as exc:
+        assert "No curve found" in str(exc)

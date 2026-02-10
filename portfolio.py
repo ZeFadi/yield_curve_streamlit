@@ -146,7 +146,11 @@ def standardize_portfolio_df(
         warnings.append("Missing curve_id column; defaulting to BASE.")
         df["curve_id"] = "BASE"
     else:
-        df["curve_id"] = df["curve_id"].astype(str).fillna("BASE")
+        curve_id_series = df["curve_id"]
+        curve_id_series = curve_id_series.where(curve_id_series.notna(), "BASE")
+        curve_id_series = curve_id_series.astype(str).str.strip()
+        curve_id_series = curve_id_series.replace({"": "BASE", "nan": "BASE", "None": "BASE"})
+        df["curve_id"] = curve_id_series
     df = df.reset_index(drop=True)
 
     if df.empty:
