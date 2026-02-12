@@ -1,314 +1,285 @@
 # Yield Curve & Portfolio Manager
 
-**Application professionnelle d'analyse de courbes de taux et de gestion de portefeuille obligataire**
+A research-oriented and production-minded Streamlit platform for yield curve analytics, fixed-income portfolio valuation, risk decomposition, and scenario-driven decision support.
 
-> Outil quantitatif pour la construction de courbes de taux, le pricing de portefeuilles obligataires et les stress tests déterministes.
-
----
-
-## Fondements Mathématiques
-
-### 1. Courbe des Taux Zéro-Coupon
-
-Le taux zéro-coupon $R(t)$ représente le rendement actuariel continu d'une obligation zéro-coupon de maturité $t$. Le facteur d'actualisation associé est :
-
-$$P(t) = e^{-R(t) \cdot t}$$
-
-### 2. Taux Forward Instantané
-
-Le taux forward instantané $f(t)$ est défini comme la dérivée logarithmique du facteur d'actualisation :
-
-$$f(t) = -\frac{d}{dt}\ln P(t) = \frac{d}{dt}\left[R(t) \cdot t\right]$$
-
-En développant :
-
-$$\boxed{f(t) = R(t) + t \cdot R'(t)}$$
-
-où $R'(t)$ est la dérivée première du taux zéro.
-
-### 3. Taux Forward à Terme
-
-Le taux forward entre deux maturités $t_1$ et $t_2$ (avec $t_1 < t_2$) est :
-
-$$F(t_1, t_2) = \frac{R(t_2) \cdot t_2 - R(t_1) \cdot t_1}{t_2 - t_1}$$
-
-**Exemple :** Le taux 5Y5Y (5 ans dans 5 ans) représente le taux forward à 5 ans observé dans 5 ans :
-$$F(5, 10) = \frac{R(10) \times 10 - R(5) \times 5}{10 - 5}$$
+**Contact:** [fadi.hafiane@outlook.fr](mailto:fadi.hafiane@outlook.fr)
 
 ---
 
-## Méthodes d'Interpolation
+## Abstract
 
-### Spline Cubique Naturelle (Continuité C²)
+This application implements a coherent fixed-income analytics stack centered on:
+- zero-curve construction and interpolation,
+- bond-level valuation under continuous compounding,
+- first- and second-order risk estimation (DV01, CS01, convexity),
+- carry and roll-down decomposition,
+- key-rate and principal-component exposure analysis,
+- relative-value diagnostics via Z-spread and residual screening,
+- deterministic and historical stress testing,
+- period P&L attribution.
 
-La spline cubique naturelle assure une courbe deux fois continûment dérivable. Sur chaque segment $[t_i, t_{i+1}]$, le polynôme $S_i(t)$ satisfait :
-
-$$S_i(t) = a_i + b_i(t-t_i) + c_i(t-t_i)^2 + d_i(t-t_i)^3$$
-
-**Conditions aux bords (naturelles) :**
-$$S''(t_0) = 0 \quad \text{et} \quad S''(t_n) = 0$$
-
-| Avantages | Inconvénients |
-|-----------|---------------|
-| Continuité C² (courbe lisse) | Sensibilité globale (propagation des chocs) |
-| Dérivées analytiques | Oscillations parasites possibles |
-| Adapté au pricing dérivés | Risque de distorsion des forwards |
-
-### PCHIP - Shape-Preserving (Continuité C¹)
-
-Le PCHIP (Piecewise Cubic Hermite Interpolating Polynomial) préserve la monotonie des données. Les pentes $d_i$ aux nœuds sont calculées pour garantir :
-
-$$\text{Si } \Delta_i = \frac{y_{i+1} - y_i}{x_{i+1} - x_i} \text{ et } \Delta_{i-1} \text{ ont le même signe, alors } d_i = \frac{2\Delta_{i-1}\Delta_i}{\Delta_{i-1} + \Delta_i}$$
-
-| Avantages | Inconvénients |
-|-----------|---------------|
-| Préservation de forme | Continuité C¹ seulement |
-| Comportement local | Dérivées secondes discontinues |
-| Stabilité des forwards | Moins lisse visuellement |
+The design objective is **internal consistency**: formulas, variable naming, and tab outputs follow the same modeling conventions across the full app.
 
 ---
 
-## Pricing Obligataire
+## Mathematical Foundations
 
-### Valeur Actuelle (PV)
+### Notation and Units
 
-Pour une obligation à taux fixe avec des flux de coupon $C_j$ aux dates $t_j$ et remboursement du principal $N$ à maturité $T$ :
+- `R(t)`: zero rate at maturity `t` in **percent**.
+- `spread_bps`, `curve_bump_bps`, `spread_bump_bps`: in **basis points**.
+- `t`: time in years (ACT/365 or ACT/365.25 depending on module).
+- Conversion reminders:
+  - `1 bp = 0.01%`
+  - Decimal rate = `percent / 100`
 
-$$PV = \sum_{j=1}^{n} C_j \cdot e^{-r(t_j) \cdot t_j} + N \cdot e^{-r(T) \cdot T}$$
+### Discounting and Forward Rates
 
-où $r(t) = \frac{R(t) + s}{100}$ avec $s$ le spread de crédit en pourcentage.
+Discount factor under continuous compounding:
 
-### Intérêts Courus
+$$
+DF(t)=\exp\left(-\left(\frac{R(t)+s_{bps}/100}{100}\right)t\right)
+$$
 
-Les intérêts courus (Accrued Interest) en convention ACT/ACT sont :
+Instantaneous forward:
 
-$$AI = C \times \frac{\text{Jours depuis dernier coupon}}{\text{Jours dans la période}}$$
+$$
+f(t)=R(t)+tR'(t)
+$$
 
-**Prix Clean vs Dirty :**
-- **Dirty Price** = PV (valeur totale)
-- **Clean Price** = PV - Intérêts Courus
+Term forward:
 
----
+$$
+F(t_1,t_2)=\frac{R(t_2)t_2-R(t_1)t_1}{t_2-t_1},\quad t_1<t_2
+$$
 
-## Métriques de Risque
+### Bond PV, Clean/Dirty, and Risk
 
-### Duration Modifiée
+Bond present value (implementation in `price_bond`):
 
-La duration modifiée mesure la sensibilité du prix aux variations de taux :
+$$
+PV=\sum_j CF_j\exp\left(-\left(\frac{R(t_j)+\texttt{total\_bps}/100}{100}\right)t_j\right)
+$$
 
-$$D_{mod} \approx \frac{1}{PV} \times \frac{PV_{\downarrow} - PV_{\uparrow}}{2\Delta r}$$
+with `total_bps = curve_bump_bps + spread_bps + spread_bump_bps`.
 
-où $\Delta r = 1$ bp = 0.0001
+Clean/dirty relation:
 
-### Convexité
+$$
+\texttt{dirty\_price}=PV,\qquad \texttt{clean\_price}=PV-\texttt{accrued\_interest}
+$$
 
-La convexité capture l'effet de second ordre (courbure) :
+Finite-difference sensitivities:
 
-$$C = \frac{1}{PV} \times \frac{PV_{\uparrow} + PV_{\downarrow} - 2 \cdot PV}{(\Delta r)^2}$$
+$$
+\texttt{dv01}=\frac{PV_{down}-PV_{up}}{2}
+$$
 
-### DV01 (Dollar Value of 01)
+$$
+\texttt{modified\_duration}=\frac{\texttt{dv01}}{PV(\texttt{bump\_bps}/10000)}
+$$
 
-Variation de valeur pour un choc de 1 point de base sur la courbe entière :
+$$
+\texttt{convexity}=\frac{PV_{up}+PV_{down}-2PV}{PV\Delta^2},\quad \Delta=\texttt{bump\_bps}/10000
+$$
 
-$$DV01 = \frac{PV_{\downarrow 1bp} - PV_{\uparrow 1bp}}{2}$$
-
-### CS01 (Credit Spread 01)
-
-Variation de valeur pour un choc de 1 bp sur le spread de crédit uniquement :
-
-$$CS01 = \frac{PV_{s-1bp} - PV_{s+1bp}}{2}$$
-
----
-
-## Scénarios de Stress Test
-
-### 1. Choc Parallèle
-
-Déplacement uniforme de la courbe entière de $\Delta$ bp :
-
-$$R'(t) = R(t) + \frac{\Delta}{100}$$
-
-### 2. Choc de Pente (Twist)
-
-Aplatissement ou pentification avec interpolation linéaire entre court et long terme :
-
-$$R'(t) = R(t) + \frac{1}{100}\left[\Delta_{short} + (\Delta_{long} - \Delta_{short}) \cdot \frac{t - t_{min}}{t_{max} - t_{min}}\right]$$
-
-### 3. Choc Key Rate
-
-Chocs ponctuels à des ténors spécifiques (ex: 2Y, 5Y, 10Y) pour analyser l'exposition aux différentes parties de la courbe :
-
-$$R'(t_k) = R(t_k) + \frac{\Delta_k}{100}$$
+$$
+\texttt{cs01}=\frac{PV^{spread\ down}-PV^{spread\ up}}{2}
+$$
 
 ---
 
-## Architecture du Projet
+## Page-by-Page Model Specification
 
-```
-yield_curve_streamlit/
-├── app.py                    # Interface Streamlit principale
-├── yield_curve_analyzer.py   # Moteur de construction de courbe
-├── pricing.py                # Fonctions de pricing et risque
-├── portfolio.py              # Gestion des positions
-├── scenarios.py              # Scénarios de stress test
-├── requirements.txt          # Dépendances Python
-├── sample_portfolio.csv      # Exemple de portefeuille
-└── tests/                    # Tests unitaires
-```
+The app tabs in `app.py` are listed below with their governing formulas.
 
-### Modules Principaux
+### 1. Curves
 
-| Module | Responsabilité |
-|--------|----------------|
-| `YieldCurveAnalyzer` | Construction de courbe, interpolation, calcul des forwards |
-| `price_bond()` | Actualisation des flux, calcul PV/dirty/clean |
-| `bond_risk_metrics()` | Duration, convexité, DV01, CS01 |
-| `apply_*_shock()` | Application des scénarios de stress |
+- Interpolation: Natural cubic spline and PCHIP.
+- Stress response comparison via shocked tenor knot and post-interpolation delta curves.
+- Outputs: zero curve, instantaneous forward curve, shock propagation diagnostics.
+
+### 2. Portfolio
+
+- Bond-level valuation through discounted cashflows.
+- Accrued-interest computation and clean/dirty split.
+- Bond and portfolio aggregates for `pv`, `dv01`, `cs01`, duration, convexity.
+
+### 3. Carry & Roll-Down
+
+Per bond:
+
+$$
+\texttt{carry}=\texttt{coupons\_received}+(\texttt{accrued\_t1}-\texttt{accrued\_t0})-\texttt{funding\_cost}
+$$
+
+$$
+\texttt{rolldown}=\texttt{clean\_t1}-\texttt{clean\_t0}
+$$
+
+$$
+\texttt{total\_return}=\texttt{carry}+\texttt{rolldown}
+$$
+
+Annualized return metrics are reported in bps relative to `pv_now`.
+
+### 4. DV01 Ladder
+
+Bucket risk:
+
+$$
+\texttt{bucket\_dv01}_b=\sum_{i\in b}\texttt{dv01}_i
+$$
+
+$$
+\texttt{pct\_of\_total}_b=\frac{\texttt{bucket\_dv01}_b}{\sum_k\texttt{bucket\_dv01}_k}\cdot100
+$$
+
+Key-rate duration (KRD): portfolio repriced under localized tenor bumps.
+
+### 5. PCA Analysis
+
+Portfolio exposure to stylized level/slope/curvature loadings:
+
+$$
+\texttt{level\_exposure}=\sum_i dv01_i\cdot level_i
+$$
+
+$$
+\texttt{slope\_exposure}=\sum_i dv01_i\cdot slope_i
+$$
+
+$$
+\texttt{curvature\_exposure}=\sum_i dv01_i\cdot curvature_i
+$$
+
+### 6. Relative Value
+
+Z-spread (`compute_z_spread`) solves:
+
+$$
+\texttt{objective}(z)=PV(z)-\texttt{target\_pv}=0
+$$
+
+Rich/cheap residual:
+
+$$
+\texttt{residual\_bps}=\texttt{z\_spread\_bps}-\widehat{z}(\texttt{duration})
+$$
+
+Signal thresholds: CHEAP (> +15 bps), RICH (< -15 bps), FAIR otherwise.
+
+### 7. Historical Stress
+
+Historical scenario anchor moves are linearly interpolated by tenor and applied to the current curve.
+
+$$
+\texttt{pnl}=\texttt{stressed\_pv}-\texttt{base\_pv}
+$$
+
+### 8. Scenarios
+
+Supported transformations:
+- Parallel shift.
+- Twist (short-end vs long-end linear blend).
+- Key-rate shock (triangular local bumps).
+- Spread shock on corporates only.
+
+### 9. P&L Attribution
+
+Sequential decomposition:
+
+$$
+\texttt{total\_pnl}=\texttt{carry}+\texttt{rolldown}+\texttt{rate\_move}+\texttt{spread\_move}+\texttt{residual}
+$$
+
+where each component is computed from staged repricing (`t0` curves/spreads to `t1` curves/spreads).
+
+### 10. Documentation (in-app)
+
+The app now includes a dedicated `Documentation` tab summarizing formulas, assumptions, and portfolio-management interpretation notes.
 
 ---
 
-## Installation et Lancement
-
-### Prérequis
-
-- Python 3.9+
-- pip
+## Practical User Guide
 
 ### Installation
 
 ```bash
-# Cloner ou télécharger le projet
-cd yield_curve_streamlit
-
-# Créer un environnement virtuel (recommandé)
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou: venv\Scripts\activate  # Windows
-
-# Installer les dépendances
 pip install -r requirements.txt
-```
-
-### Lancement
-
-```bash
 streamlit run app.py
 ```
 
-L'application sera disponible sur `http://localhost:8501`
+### Typical Workflow
+
+1. Load market curve data (sample, Treasury, CSV, or DB).
+2. Choose interpolation method and stress controls in sidebar.
+3. Load/edit portfolio in `Portfolio`.
+4. Review risk and analytics tabs (`Carry & Roll-Down`, `DV01 Ladder`, `PCA Analysis`, `Relative Value`).
+5. Run `Historical Stress` and custom `Scenarios`.
+6. Reconcile period economics in `P&L Attribution`.
+7. Use `Documentation` tab to verify formulas/interpretation with stakeholders.
+
+### Input Data Contracts
+
+Curve data requires:
+- `tenor` (years),
+- `rate` (percent),
+- optional `curve_id` for multi-curve setups.
+
+Portfolio data requires standard fixed-income fields (ID, issuer, notional, coupon terms, maturity, etc.) and supports optional `clean_price`, `curve_id`, and `spread_bps`.
 
 ---
 
-## Utilisation
+## Financial Interpretation Notes
 
-### 1. Chargement des Données de Marché
+This app is suitable for senior PM-style workflows:
+- **Positioning:** duration, KRD, and PCA jointly characterize directional and shape risk.
+- **Relative value:** Z-spread residuals provide transparent rich/cheap signals with explicit model caveats.
+- **Attribution:** carry/roll/rates/spreads decomposition supports committee-grade explainability.
 
-L'application supporte plusieurs sources de données :
-- **Sample OIS/Govt** : Courbes d'exemple pré-chargées
-- **US Treasury** : Téléchargement automatique des données journalières du Trésor américain
-- **Upload CSV** : Import de fichiers personnalisés (colonnes : `tenor`, `rate`)
-- **Database** : Connexion à une base de données via SQLAlchemy
-
-### 2. Analyse de Courbe
-
-- Visualisation des courbes zéro et forward
-- Comparaison des méthodes d'interpolation
-- Calcul des forwards à terme (1Y1Y, 2Y3Y, 5Y5Y)
-- Stress tests avec analyse de propagation
-
-### 3. Gestion de Portefeuille
-
-- Import de positions obligataires
-- Calcul automatique des métriques de risque
-- Agrégation au niveau portefeuille
-
-### 4. Analyse de Scénarios
-
-- Chocs parallèles, twist, key rate
-- Chocs de spread (credit)
-- Calcul du P&L par scénario
+CFA Level III-aligned perspective:
+- distinguish expected carry/roll from realized market effects,
+- separate structural factor exposure from idiosyncratic spread behavior,
+- control model risk via residual monitoring and scenario triangulation.
 
 ---
 
-## Format des Données
+## Validation and Consistency Controls
 
-### Courbe de Taux (CSV)
+Before production use or release:
 
-```csv
-tenor,rate
-0.25,3.85
-0.5,3.90
-1,3.95
-2,3.75
-5,3.45
-10,3.65
-30,4.15
-```
-
-### Portefeuille (CSV)
-
-```csv
-id,issuer,type,currency,notional,coupon_rate,coupon_freq,maturity_date,curve_id,spread_bps
-UST_5Y,US Treasury,sovereign,USD,5000000,4.25,2,2030-02-15,UST,0
-ACME_28,ACME Corp,corporate,USD,3000000,5.75,2,2028-08-15,UST,180
-```
-
-| Colonne | Description | Requis |
-|---------|-------------|--------|
-| `id` | Identifiant unique | ✅ |
-| `issuer` | Nom de l'émetteur | ✅ |
-| `type` | `sovereign` ou `corporate` | ✅ |
-| `currency` | Code devise (USD, EUR, ...) | ✅ |
-| `notional` | Montant nominal | ✅ |
-| `coupon_rate` | Taux coupon annuel (%) | ✅ |
-| `coupon_freq` | Fréquence des coupons (1, 2, 4) | ✅ |
-| `maturity_date` | Date de maturité | ✅ |
-| `curve_id` | Identifiant de la courbe | ❌ |
-| `spread_bps` | Spread de crédit (bp) | ❌ |
+1. Verify `%` vs `bps` conversions on any new module.
+2. Confirm carry/accrued sign conventions match `carry_rolldown.py` and `pnl_attribution.py`.
+3. Keep key-rate shock geometry aligned between `risk_ladder.py` and `scenarios.py`.
+4. Ensure new analytics pages include matching math notes in both this README and the in-app `Documentation` tab.
 
 ---
 
-## Configuration Avancée
+## Limitations and Model Risk
 
-### Variables d'Environnement
-
-- `YC_DB_URL` : URL de connexion à la base de données (format SQLAlchemy)
-
-### Streamlit Secrets
-
-Créer un fichier `.streamlit/secrets.toml` :
-
-```toml
-YC_DB_URL = "postgresql://user:password@host:port/database"
-```
+- Interpolation is deterministic and does not estimate parameter uncertainty.
+- Day-count assumptions are simplified in some modules (ACT/365 or ACT/365.25).
+- Credit modeling is reduced-form (`spread_bps`, `z_spread`) and omits liquidity and optionality adjustments.
+- Historical stresses are scenario replays, not probabilistic forecasts.
 
 ---
 
-## Références Théoriques
+## Project Structure
 
-1. **Interpolation de courbes** : Hagan, P.S. & West, G. (2006). *Interpolation Methods for Curve Construction*. Applied Mathematical Finance.
-
-2. **Duration et Convexité** : Fabozzi, F.J. (2007). *Fixed Income Analysis*. CFA Institute.
-
-3. **Splines cubiques** : De Boor, C. (1978). *A Practical Guide to Splines*. Springer-Verlag.
-
-4. **PCHIP** : Fritsch, F.N. & Carlson, R.E. (1980). *Monotone Piecewise Cubic Interpolation*. SIAM Journal on Numerical Analysis.
-
----
-
-## Avertissement
-
-Cette application est fournie à titre éducatif et de démonstration. Les données du Trésor américain importées sont des rendements "par" (par yields) et non des taux zéro - une étape de bootstrap serait nécessaire pour une utilisation en production.
-
-Pour toute décision d'investissement, consultez un professionnel qualifié.
+- `app.py`: Streamlit application and tab orchestration.
+- `yield_curve_analyzer.py`: curve construction/interpolation/forwards/stress response.
+- `pricing.py`: pricing engine and risk metrics.
+- `carry_rolldown.py`: expected return decomposition.
+- `risk_ladder.py`: DV01 bucketing and KRD.
+- `pca_analysis.py`: level/slope/curvature decomposition.
+- `relative_value.py`: Z-spread and rich/cheap framework.
+- `historical_scenarios.py`, `scenarios.py`: stress engines.
+- `pnl_attribution.py`: period P&L decomposition.
 
 ---
 
-## Licence
+## Disclaimer
 
-Ce projet est distribué sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
-
----
-
-*Développé pour la finance quantitative*
+This software is for analytics, research, and decision support. It is not investment advice. Production deployment should include independent model validation, governance, and controls.
 

@@ -77,8 +77,6 @@ def interpolate_scenario_shifts(scenario_name: str, curve_df: pd.DataFrame) -> p
     tenors = shocked_df["tenor"].astype(float).values
 
     # Interpolate shifts for each tenor
-    import numpy as np
-
     shifts = np.interp(tenors, tenor_points, shift_points)
     shocked_df["rate"] = shocked_df["rate"] + shifts / 100.0  # Convert bps to %
 

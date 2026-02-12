@@ -65,16 +65,13 @@ def compute_pnl_attribution(
     total_accrued_change = 0.0
 
     for row in positions_df.itertuples(index=False):
-        settlement = getattr(row, "settlement_date", date_t0)
-        if pd.isna(settlement):
-            settlement = date_t0
-
         curve_id = getattr(row, "curve_id", default_curve_id) or default_curve_id
         curve = _resolve_curve(curve_map_t0, curve_id, default_curve_id)
         spread = float(getattr(row, "spread_bps", 0.0))
 
+        # Attribution is measured over [date_t0, date_t1], independent of trade settlement.
         coupons = _coupons_in_period(
-            settlement, date_t1,
+            date_t0, date_t1,
             getattr(row, "maturity_date"),
             float(getattr(row, "coupon_rate")),
             int(getattr(row, "coupon_freq")),
@@ -84,7 +81,7 @@ def compute_pnl_attribution(
 
         # Accrued at t0
         _, _, _, accrued_t0 = price_bond(
-            curve, settlement,
+            curve, date_t0,
             getattr(row, "maturity_date"),
             float(getattr(row, "coupon_rate")),
             int(getattr(row, "coupon_freq")),
