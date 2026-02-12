@@ -52,6 +52,30 @@ from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod
 from pricing import price_bond, bond_risk_metrics, _resolve_curve
 
 
+def _extract_metrics(metrics_obj) -> tuple[float, float]:
+    """Return (modified_duration, pv) from multiple metric return shapes."""
+    # Current shape: dataclass/object with attributes
+    if hasattr(metrics_obj, "modified_duration") and hasattr(metrics_obj, "pv"):
+        return float(metrics_obj.modified_duration), float(metrics_obj.pv)
+
+    # Alternate shape: dict-like
+    if isinstance(metrics_obj, dict):
+        md = metrics_obj.get("modified_duration", metrics_obj.get("duration", 0.0))
+        pv = metrics_obj.get("pv", 0.0)
+        return float(md), float(pv)
+
+    # Legacy shape: tuple/list positional output
+    if isinstance(metrics_obj, (tuple, list)):
+        # Expected ordering in legacy variants:
+        # (pv, dirty, clean, accrued, modified_duration, convexity, dv01, cs01)
+        if len(metrics_obj) >= 5:
+            return float(metrics_obj[4]), float(metrics_obj[0])
+        if len(metrics_obj) >= 1:
+            return 0.0, float(metrics_obj[0])
+
+    raise TypeError(f"Unsupported metrics object type: {type(metrics_obj).__name__}")
+
+
 def compute_z_spread(
     curve: YieldCurveAnalyzer,
     settlement_date: date,
@@ -130,6 +154,7 @@ def portfolio_z_spreads(
             spread_bps=spread,
             method=method,
         )
+        mod_duration, pv_value = _extract_metrics(metrics)
 
         market_price = getattr(row, "clean_price", None)
         z_spread = float("nan")
@@ -154,12 +179,12 @@ def portfolio_z_spreads(
                 "id": getattr(row, "id"),
                 "issuer": getattr(row, "issuer"),
                 "type": getattr(row, "type"),
-                "duration": metrics.modified_duration,
+                "duration": mod_duration,
                 "years_to_maturity": years_to_mat,
                 "model_spread_bps": spread,
                 "z_spread_bps": z_spread,
                 "clean_price": market_price if market_price is not None else float("nan"),
-                "pv": metrics.pv,
+                "pv": pv_value,
             }
         )
 
