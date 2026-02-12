@@ -174,7 +174,7 @@ Signal thresholds: CHEAP (> +15 bps), RICH (< -15 bps), FAIR otherwise.
 Historical scenario anchor moves are linearly interpolated by tenor and applied to the current curve.
 
 $$
-P\&L=PV_{\mathrm{stressed}}-PV_{\mathrm{base}}
+PnL=PV_{\mathrm{stressed}}-PV_{\mathrm{base}}
 $$
 
 ### 8. Scenarios
@@ -190,7 +190,7 @@ Supported transformations:
 Sequential decomposition:
 
 $$
-\mathrm{Total}\;P\&L=\mathrm{Carry}+\mathrm{RollDown}+\mathrm{RateMove}+\mathrm{SpreadMove}+\mathrm{Residual}
+\mathrm{Total}\;PnL=\mathrm{Carry}+\mathrm{RollDown}+\mathrm{RateMove}+\mathrm{SpreadMove}+\mathrm{Residual}
 $$
 
 where each component is computed from staged repricing (`t0` curves/spreads to `t1` curves/spreads).
