@@ -22,6 +22,7 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
+import warnings
 try:
     from scipy.optimize import brentq
 except Exception:
@@ -52,28 +53,55 @@ from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod
 from pricing import price_bond, bond_risk_metrics, _resolve_curve
 
 
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        if value is None or (isinstance(value, float) and np.isnan(value)):
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
 def _extract_metrics(metrics_obj) -> tuple[float, float]:
     """Return (modified_duration, pv) from multiple metric return shapes."""
     # Current shape: dataclass/object with attributes
     if hasattr(metrics_obj, "modified_duration") and hasattr(metrics_obj, "pv"):
-        return float(metrics_obj.modified_duration), float(metrics_obj.pv)
+        return _safe_float(metrics_obj.modified_duration), _safe_float(metrics_obj.pv)
+
+    # Namedtuple-like
+    if hasattr(metrics_obj, "_asdict"):
+        d = metrics_obj._asdict()
+        return _safe_float(d.get("modified_duration", d.get("duration", 0.0))), _safe_float(d.get("pv", 0.0))
 
     # Alternate shape: dict-like
     if isinstance(metrics_obj, dict):
         md = metrics_obj.get("modified_duration", metrics_obj.get("duration", 0.0))
         pv = metrics_obj.get("pv", 0.0)
-        return float(md), float(pv)
+        return _safe_float(md), _safe_float(pv)
+
+    # Pandas Series-like
+    if isinstance(metrics_obj, pd.Series):
+        return _safe_float(metrics_obj.get("modified_duration", metrics_obj.get("duration", 0.0))), _safe_float(metrics_obj.get("pv", 0.0))
 
     # Legacy shape: tuple/list positional output
     if isinstance(metrics_obj, (tuple, list)):
         # Expected ordering in legacy variants:
         # (pv, dirty, clean, accrued, modified_duration, convexity, dv01, cs01)
         if len(metrics_obj) >= 5:
-            return float(metrics_obj[4]), float(metrics_obj[0])
+            return _safe_float(metrics_obj[4]), _safe_float(metrics_obj[0])
         if len(metrics_obj) >= 1:
-            return 0.0, float(metrics_obj[0])
+            return 0.0, _safe_float(metrics_obj[0])
 
-    raise TypeError(f"Unsupported metrics object type: {type(metrics_obj).__name__}")
+    # Last resort: try scalar PV fallback and continue without duration.
+    if np.isscalar(metrics_obj):
+        return 0.0, _safe_float(metrics_obj)
+
+    warnings.warn(
+        f"Unsupported metrics object type '{type(metrics_obj).__name__}' in portfolio_z_spreads; "
+        "defaulting duration and pv to 0 for this row.",
+        RuntimeWarning,
+    )
+    return 0.0, 0.0
 
 
 def compute_z_spread(
