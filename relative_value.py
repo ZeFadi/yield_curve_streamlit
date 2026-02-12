@@ -22,7 +22,31 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import brentq
+try:
+    from scipy.optimize import brentq
+except Exception:
+    def brentq(func, a, b, xtol=0.01, maxiter=200):
+        """Fallback bisection solver when scipy is unavailable."""
+        fa = func(a)
+        fb = func(b)
+        if fa == 0:
+            return a
+        if fb == 0:
+            return b
+        if fa * fb > 0:
+            raise ValueError("Root not bracketed")
+        lo, hi = a, b
+        flo, fhi = fa, fb
+        for _ in range(maxiter):
+            mid = 0.5 * (lo + hi)
+            fmid = func(mid)
+            if abs(fmid) <= xtol or abs(hi - lo) <= xtol:
+                return mid
+            if flo * fmid <= 0:
+                hi, fhi = mid, fmid
+            else:
+                lo, flo = mid, fmid
+        return 0.5 * (lo + hi)
 
 from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod
 from pricing import price_bond, bond_risk_metrics, _resolve_curve
@@ -130,7 +154,7 @@ def portfolio_z_spreads(
                 "id": getattr(row, "id"),
                 "issuer": getattr(row, "issuer"),
                 "type": getattr(row, "type"),
-                "duration": metrics.macaulay_duration,
+                "duration": metrics.modified_duration,
                 "years_to_maturity": years_to_mat,
                 "model_spread_bps": spread,
                 "z_spread_bps": z_spread,

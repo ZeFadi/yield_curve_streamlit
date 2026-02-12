@@ -1248,15 +1248,15 @@ with tabs[9]:
     For each cashflow at time `t_j`:
 
     $$
-    PV = \\sum_j CF_j \\cdot \\exp\\left(-\\left(\\frac{R(t_j) + \\texttt{total\\_bps}/100}{100}\\right)t_j\\right)
+    PV = \\sum_j CF_j \\cdot \\exp\\left(-\\left(\\frac{R(t_j) + b_{\\mathrm{total}}/100}{100}\\right)t_j\\right)
     $$
 
-    where `total_bps = curve_bump_bps + spread_bps + spread_bump_bps`.
+    where \\(b_{\\mathrm{total}}\\) is the sum of curve and spread bumps (in bps).
 
     Clean/dirty decomposition:
 
     $$
-    \\texttt{dirty\\_price}=PV, \\quad \\texttt{clean\\_price}=PV-\\texttt{accrued\\_interest}
+    P_{\\mathrm{dirty}}=PV, \\quad P_{\\mathrm{clean}}=PV-AI
     $$
 
     **Financial comment:** separating clean from dirty is required for consistent relative-value comparisons and period attribution.
@@ -1266,19 +1266,19 @@ with tabs[9]:
     Symmetric 1bp finite differences:
 
     $$
-    \\texttt{dv01}=\\frac{PV_{down}-PV_{up}}{2}
+    DV01=\\frac{PV_{down}-PV_{up}}{2}
     $$
 
     $$
-    \\texttt{modified\\_duration}=\\frac{\\texttt{dv01}}{PV \\cdot (\\texttt{bump\\_bps}/10000)}
+    D_{\\mathrm{mod}}=\\frac{DV01}{PV \\cdot (\\Delta bps/10000)}
     $$
 
     $$
-    \\texttt{convexity}=\\frac{PV_{up}+PV_{down}-2PV}{PV\\cdot\\Delta^2}, \\quad \\Delta=\\texttt{bump\\_bps}/10000
+    \\mathrm{Convexity}=\\frac{PV_{up}+PV_{down}-2PV}{PV\\cdot\\Delta^2}, \\quad \\Delta=\\Delta bps/10000
     $$
 
     $$
-    \\texttt{cs01}=\\frac{PV^{spread\\ down}-PV^{spread\\ up}}{2}
+    CS01=\\frac{PV^{spread\\ down}-PV^{spread\\ up}}{2}
     $$
 
     **Financial comment:** DV01 controls first-order rate beta; convexity matters under large shocks and non-linear re-pricing.
@@ -1286,15 +1286,15 @@ with tabs[9]:
     ### 3) Carry & Roll-Down
 
     $$
-    \\texttt{carry}=\\texttt{coupons\\_received} + (\\texttt{accrued\\_t1}-\\texttt{accrued\\_t0}) - \\texttt{funding\\_cost}
+    \\mathrm{Carry}=\\mathrm{Coupons}_{t_0\\to t_1} + (AI_{t_1}-AI_{t_0}) - \\mathrm{FundingCost}
     $$
 
     $$
-    \\texttt{rolldown}=\\texttt{clean\\_t1}-\\texttt{clean\\_t0}
+    \\mathrm{RollDown}=P_{\\mathrm{clean},t_1}-P_{\\mathrm{clean},t_0}
     $$
 
     $$
-    \\texttt{total\\_return}=\\texttt{carry}+\\texttt{rolldown}
+    \\mathrm{TotalReturn}=\\mathrm{Carry}+\\mathrm{RollDown}
     $$
 
     **Financial comment:** this decomposition is the desk-standard pre-positioning lens before introducing macro spread/rate views.
@@ -1325,19 +1325,19 @@ with tabs[9]:
     Z-spread root:
 
     $$
-    \\texttt{objective}(z)=PV(z)-\\texttt{target\\_pv}=0
+    f(z)=PV(z)-PV_{\\mathrm{target}}=0
     $$
 
     OLS rich/cheap residual:
 
     $$
-    \\texttt{residual\\_bps}=\\texttt{z\\_spread\\_bps}-\\widehat{z}(\\texttt{duration})
+    \\mathrm{Residual}_{bps}=z_{bps}-\\widehat{z}(D_{\\mathrm{mod}})
     $$
 
     Period attribution:
 
     $$
-    \\texttt{total\\_pnl}=\\texttt{carry}+\\texttt{rolldown}+\\texttt{rate\\_move}+\\texttt{spread\\_move}+\\texttt{residual}
+    \\mathrm{Total}\\;P\\&L=\\mathrm{Carry}+\\mathrm{RollDown}+\\mathrm{RateMove}+\\mathrm{SpreadMove}+\\mathrm{Residual}
     $$
 
     **Financial comment:** residual should remain small over stable horizons; persistent residual drift indicates model misspecification or un-modeled optionality.

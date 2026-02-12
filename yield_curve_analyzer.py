@@ -14,10 +14,49 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.interpolate import CubicSpline, PchipInterpolator
 from typing import Union, List, Dict, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
+import warnings
+
+try:
+    from scipy.interpolate import CubicSpline, PchipInterpolator
+    _SCIPY_AVAILABLE = True
+except Exception:
+    _SCIPY_AVAILABLE = False
+
+    class _LinearInterpolator:
+        """Fallback interpolator when scipy is unavailable."""
+
+        def __init__(
+            self,
+            x: np.ndarray,
+            y: np.ndarray,
+            bc_type: str | None = None,
+            extrapolate: bool = True,
+        ) -> None:
+            self.x = np.asarray(x, dtype=float)
+            self.y = np.asarray(y, dtype=float)
+            self.extrapolate = extrapolate
+            self._slopes = np.gradient(self.y, self.x)
+
+        def __call__(self, x_new: Union[float, np.ndarray], nu: int = 0) -> Union[float, np.ndarray]:
+            x_arr = np.asarray(x_new, dtype=float)
+            x_eval = x_arr.copy()
+            if not self.extrapolate:
+                x_eval = np.clip(x_eval, self.x.min(), self.x.max())
+
+            if nu == 0:
+                out = np.interp(x_eval, self.x, self.y)
+            elif nu == 1:
+                out = np.interp(x_eval, self.x, self._slopes)
+            else:
+                out = np.zeros_like(x_eval, dtype=float)
+
+            return float(out) if np.isscalar(x_new) else out
+
+    CubicSpline = _LinearInterpolator
+    PchipInterpolator = _LinearInterpolator
 
 
 class InterpolationMethod(Enum):
@@ -154,6 +193,12 @@ class YieldCurveAnalyzer:
             This is shape-preserving but is not the same as the Hagan-West
             monotone convex algorithm used in some production curve engines.
         """
+        if not _SCIPY_AVAILABLE:
+            warnings.warn(
+                "scipy is not available; using linear interpolation fallback. "
+                "Install scipy for cubic spline and PCHIP behavior.",
+                RuntimeWarning,
+            )
         self.cubic_spline: CubicSpline = CubicSpline(
             self.tenors, 
             self.rates, 
@@ -192,7 +237,6 @@ class YieldCurveAnalyzer:
             raise ValueError(f"Maturity must be strictly positive, got {t}")
         if np.any(t_arr > self.tenors.max() * 1.5):
             # Warning for significant extrapolation
-            import warnings
             warnings.warn(
                 f"Extrapolating beyond 150% of maximum tenor ({self.tenors.max()}Y). "
                 "Results may be unreliable.",
@@ -620,6 +664,81 @@ class YieldCurveAnalyzer:
             if t2 <= self.tenors.max():
                 fwd = self.get_forward_rate_term(t1, t2, InterpolationMethod.PCHIP)
                 print(f"  {label}: {fwd:.3f}%")
+
+
+def bootstrap_par_to_zero(
+    par_tenors: np.ndarray,
+    par_yields: np.ndarray,
+    coupon_freq: int = 2,
+) -> tuple:
+    """
+    Bootstrap continuously compounded zero rates from par yields.
+
+    For T-bills (tenor ≤ 1/coupon_freq): par yield ≈ zero rate (single cashflow).
+    For coupon-bearing bonds: iterative stripping using previously bootstrapped
+    zero rates, with linear interpolation for intermediate coupon dates.
+
+    Args:
+        par_tenors: Maturities in years.
+        par_yields: Par yields in percentage (e.g. 4.5 means 4.5%).
+        coupon_freq: Coupon frequency (2 = semi-annual for UST).
+
+    Returns:
+        Tuple of (tenors, zero_rates) as numpy arrays, both sorted by tenor.
+    """
+    sorted_idx = np.argsort(par_tenors)
+    tenors = np.array(par_tenors, dtype=float)[sorted_idx]
+    yields_pct = np.array(par_yields, dtype=float)[sorted_idx]
+
+    zero_rates = np.zeros(len(tenors), dtype=float)
+    period = 1.0 / coupon_freq
+
+    for i, (T, y) in enumerate(zip(tenors, yields_pct)):
+        if T <= period + 1e-9:
+            # Single cashflow: zero rate = par yield
+            zero_rates[i] = y
+            continue
+
+        c_decimal = y / 100.0
+        coupon_per_period = c_decimal / coupon_freq
+
+        # Generate coupon times from period up to T
+        coupon_times = np.arange(period, T + 1e-9, period)
+        # Ensure the last element is exactly T
+        if len(coupon_times) == 0 or abs(coupon_times[-1] - T) > 1e-9:
+            coupon_times = np.append(coupon_times, T)
+        else:
+            coupon_times[-1] = T
+
+        intermediate_times = coupon_times[:-1]
+
+        # Discount intermediate coupons using already-bootstrapped zero rates
+        pv_intermediate = 0.0
+        if len(intermediate_times) > 0:
+            known_tenors = tenors[:i]
+            known_zeros = zero_rates[:i]
+            if len(known_tenors) >= 1:
+                z_interp = np.interp(intermediate_times, known_tenors, known_zeros)
+            else:
+                z_interp = np.full_like(intermediate_times, y)
+            dfs = np.exp(-z_interp / 100.0 * intermediate_times)
+            pv_intermediate = np.sum(coupon_per_period * 100.0 * dfs)
+
+        # Solve for zero rate at T:
+        # 100 = pv_intermediate + (coupon + 100) * exp(-z(T) * T)
+        final_cf = coupon_per_period * 100.0 + 100.0
+        remaining = 100.0 - pv_intermediate
+
+        if remaining > 0 and final_cf > 0:
+            df_T = remaining / final_cf
+            if df_T > 0:
+                zero_rates[i] = -np.log(df_T) / T * 100.0
+            else:
+                zero_rates[i] = y
+        else:
+            zero_rates[i] = y
+
+    return tenors, zero_rates
 
 
 def create_sample_ois_curve() -> pd.DataFrame:

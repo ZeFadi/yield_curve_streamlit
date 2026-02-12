@@ -58,33 +58,33 @@ $$
 Bond present value (implementation in `price_bond`):
 
 $$
-PV=\sum_j CF_j\exp\left(-\left(\frac{R(t_j)+\texttt{total\_bps}/100}{100}\right)t_j\right)
+PV=\sum_j CF_j\exp\left(-\left(\frac{R(t_j)+b_{\mathrm{total}}/100}{100}\right)t_j\right)
 $$
 
-with `total_bps = curve_bump_bps + spread_bps + spread_bump_bps`.
+with \( b_{\mathrm{total}} = \text{curve bump} + \text{credit spread} + \text{spread bump} \) (all in bps).
 
 Clean/dirty relation:
 
 $$
-\texttt{dirty\_price}=PV,\qquad \texttt{clean\_price}=PV-\texttt{accrued\_interest}
+P_{\mathrm{dirty}}=PV,\qquad P_{\mathrm{clean}}=PV-AI
 $$
 
 Finite-difference sensitivities:
 
 $$
-\texttt{dv01}=\frac{PV_{down}-PV_{up}}{2}
+DV01=\frac{PV_{down}-PV_{up}}{2}
 $$
 
 $$
-\texttt{modified\_duration}=\frac{\texttt{dv01}}{PV(\texttt{bump\_bps}/10000)}
+D_{\mathrm{mod}}=\frac{DV01}{PV\cdot(\Delta bps/10000)}
 $$
 
 $$
-\texttt{convexity}=\frac{PV_{up}+PV_{down}-2PV}{PV\Delta^2},\quad \Delta=\texttt{bump\_bps}/10000
+\mathrm{Convexity}=\frac{PV_{up}+PV_{down}-2PV}{PV\Delta^2},\quad \Delta=\Delta bps/10000
 $$
 
 $$
-\texttt{cs01}=\frac{PV^{spread\ down}-PV^{spread\ up}}{2}
+CS01=\frac{PV^{spread\ down}-PV^{spread\ up}}{2}
 $$
 
 ---
@@ -110,15 +110,15 @@ The app tabs in `app.py` are listed below with their governing formulas.
 Per bond:
 
 $$
-\texttt{carry}=\texttt{coupons\_received}+(\texttt{accrued\_t1}-\texttt{accrued\_t0})-\texttt{funding\_cost}
+\mathrm{Carry}=\mathrm{Coupons}_{t_0\to t_1}+\left(AI_{t_1}-AI_{t_0}\right)-\mathrm{FundingCost}
 $$
 
 $$
-\texttt{rolldown}=\texttt{clean\_t1}-\texttt{clean\_t0}
+\mathrm{RollDown}=P_{\mathrm{clean},t_1}-P_{\mathrm{clean},t_0}
 $$
 
 $$
-\texttt{total\_return}=\texttt{carry}+\texttt{rolldown}
+\mathrm{TotalReturn}=\mathrm{Carry}+\mathrm{RollDown}
 $$
 
 Annualized return metrics are reported in bps relative to `pv_now`.
@@ -128,11 +128,11 @@ Annualized return metrics are reported in bps relative to `pv_now`.
 Bucket risk:
 
 $$
-\texttt{bucket\_dv01}_b=\sum_{i\in b}\texttt{dv01}_i
+DV01_b=\sum_{i\in b}DV01_i
 $$
 
 $$
-\texttt{pct\_of\_total}_b=\frac{\texttt{bucket\_dv01}_b}{\sum_k\texttt{bucket\_dv01}_k}\cdot100
+\%\mathrm{Total}_b=\frac{DV01_b}{\sum_k DV01_k}\cdot100
 $$
 
 Key-rate duration (KRD): portfolio repriced under localized tenor bumps.
@@ -142,15 +142,15 @@ Key-rate duration (KRD): portfolio repriced under localized tenor bumps.
 Portfolio exposure to stylized level/slope/curvature loadings:
 
 $$
-\texttt{level\_exposure}=\sum_i dv01_i\cdot level_i
+\mathrm{LevelExposure}=\sum_i DV01_i\cdot \mathrm{LevelLoading}_i
 $$
 
 $$
-\texttt{slope\_exposure}=\sum_i dv01_i\cdot slope_i
+\mathrm{SlopeExposure}=\sum_i DV01_i\cdot \mathrm{SlopeLoading}_i
 $$
 
 $$
-\texttt{curvature\_exposure}=\sum_i dv01_i\cdot curvature_i
+\mathrm{CurvatureExposure}=\sum_i DV01_i\cdot \mathrm{CurvatureLoading}_i
 $$
 
 ### 6. Relative Value
@@ -158,13 +158,13 @@ $$
 Z-spread (`compute_z_spread`) solves:
 
 $$
-\texttt{objective}(z)=PV(z)-\texttt{target\_pv}=0
+f(z)=PV(z)-PV_{\mathrm{target}}=0
 $$
 
 Rich/cheap residual:
 
 $$
-\texttt{residual\_bps}=\texttt{z\_spread\_bps}-\widehat{z}(\texttt{duration})
+\mathrm{Residual}_{bps}=z_{bps}-\widehat{z}\!\left(D_{\mathrm{mod}}\right)
 $$
 
 Signal thresholds: CHEAP (> +15 bps), RICH (< -15 bps), FAIR otherwise.
@@ -174,7 +174,7 @@ Signal thresholds: CHEAP (> +15 bps), RICH (< -15 bps), FAIR otherwise.
 Historical scenario anchor moves are linearly interpolated by tenor and applied to the current curve.
 
 $$
-\texttt{pnl}=\texttt{stressed\_pv}-\texttt{base\_pv}
+P\&L=PV_{\mathrm{stressed}}-PV_{\mathrm{base}}
 $$
 
 ### 8. Scenarios
@@ -190,7 +190,7 @@ Supported transformations:
 Sequential decomposition:
 
 $$
-\texttt{total\_pnl}=\texttt{carry}+\texttt{rolldown}+\texttt{rate\_move}+\texttt{spread\_move}+\texttt{residual}
+\mathrm{Total}\;P\&L=\mathrm{Carry}+\mathrm{RollDown}+\mathrm{RateMove}+\mathrm{SpreadMove}+\mathrm{Residual}
 $$
 
 where each component is computed from staged repricing (`t0` curves/spreads to `t1` curves/spreads).
@@ -282,4 +282,3 @@ Before production use or release:
 ## Disclaimer
 
 This software is for analytics, research, and decision support. It is not investment advice. Production deployment should include independent model validation, governance, and controls.
-
