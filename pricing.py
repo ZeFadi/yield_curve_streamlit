@@ -30,7 +30,7 @@ class BondPricingResult:
     dirty_price: float
     clean_price: float
     accrued_interest: float
-    macaulay_duration: float
+    modified_duration: float
     convexity: float
     dv01: float
     cs01: float
@@ -209,7 +209,7 @@ def bond_risk_metrics(
         dirty_price=dirty,
         clean_price=clean,
         accrued_interest=accrued,
-        macaulay_duration=duration,
+        modified_duration=duration,
         convexity=convexity,
         dv01=dv01,
         cs01=cs01,
@@ -267,7 +267,9 @@ def price_portfolio_df(
                 "dirty_price": result.dirty_price,
                 "clean_price": result.clean_price,
                 "accrued_interest": result.accrued_interest,
-                "duration": result.macaulay_duration,
+                "dirty_price_pct": result.dirty_price / float(getattr(row, "notional")) * 100 if float(getattr(row, "notional")) != 0 else 0.0,
+                "clean_price_pct": result.clean_price / float(getattr(row, "notional")) * 100 if float(getattr(row, "notional")) != 0 else 0.0,
+                "modified_duration": result.modified_duration,
                 "convexity": result.convexity,
                 "dv01": result.dv01,
                 "cs01": result.cs01,

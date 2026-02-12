@@ -230,10 +230,16 @@ def _fit_rich_cheap_all(df: pd.DataFrame) -> None:
     """Fit a single regression across all bonds."""
     valid = df.dropna(subset=["z_spread_bps", "duration"])
     if len(valid) >= 2:
-        coeffs = np.polyfit(valid["duration"].values, valid["z_spread_bps"].values, 1)
-        df["fitted_spread"] = coeffs[0] * df["duration"] + coeffs[1]
-        df["residual_bps"] = df["z_spread_bps"] - df["fitted_spread"]
-        _assign_signal(df)
+        try:
+            coeffs = np.polyfit(valid["duration"].values, valid["z_spread_bps"].values, 1)
+            df["fitted_spread"] = coeffs[0] * df["duration"] + coeffs[1]
+            df["residual_bps"] = df["z_spread_bps"] - df["fitted_spread"]
+            _assign_signal(df)
+        except np.linalg.LinAlgError:
+            # Fallback if SVD fails (e.g. collinear points or other numerical issues)
+            df["fitted_spread"] = float("nan")
+            df["residual_bps"] = float("nan")
+            df["signal"] = ""
     else:
         df["fitted_spread"] = float("nan")
         df["residual_bps"] = float("nan")
@@ -252,9 +258,13 @@ def _fit_rich_cheap_by_bucket(df: pd.DataFrame) -> None:
         valid = subset.dropna(subset=["z_spread_bps", "duration"])
 
         if len(valid) >= 2:
-            coeffs = np.polyfit(valid["duration"].values, valid["z_spread_bps"].values, 1)
-            df.loc[mask, "fitted_spread"] = coeffs[0] * df.loc[mask, "duration"] + coeffs[1]
-            df.loc[mask, "residual_bps"] = df.loc[mask, "z_spread_bps"] - df.loc[mask, "fitted_spread"]
+            try:
+                coeffs = np.polyfit(valid["duration"].values, valid["z_spread_bps"].values, 1)
+                df.loc[mask, "fitted_spread"] = coeffs[0] * df.loc[mask, "duration"] + coeffs[1]
+                df.loc[mask, "residual_bps"] = df.loc[mask, "z_spread_bps"] - df.loc[mask, "fitted_spread"]
+            except np.linalg.LinAlgError:
+                # Fallback if SVD fails (e.g. collinear points or other numerical issues)
+                pass
 
     _assign_signal(df)
 

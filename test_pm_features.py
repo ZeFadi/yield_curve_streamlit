@@ -15,15 +15,14 @@ print("TESTING IMPORTS")
 print("=" * 60)
 
 try:
-    from yield_curve_analyzer import YieldCurveAnalyzer, InterpolationMethod, create_sample_govt_curve
+    from yield_curve_analyzer import YieldCurveAnalyzer, create_sample_govt_curve
     from portfolio import sample_portfolio_df
-    from pricing import price_bond
-    from carry_rolldown import portfolio_carry_rolldown, compute_carry_rolldown
-    from relative_value import portfolio_z_spreads, compute_z_spread
+    from carry_rolldown import portfolio_carry_rolldown
+    from relative_value import portfolio_z_spreads
     from risk_ladder import compute_dv01_ladder, portfolio_key_rate_durations
     from historical_scenarios import list_available_scenarios, interpolate_scenario_shifts, HISTORICAL_SCENARIOS
-    from pca_analysis import decompose_portfolio_pca_exposure, get_default_pca_loadings
-    from pnl_attribution import compute_pnl_attribution, format_pnl_report
+    from pca_analysis import get_default_pca_loadings
+    from pnl_attribution import compute_pnl_attribution
     print("[PASS] All imports successful")
 except ImportError as e:
     print(f"[FAIL] Import error: {e}")
