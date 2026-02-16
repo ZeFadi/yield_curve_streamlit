@@ -182,7 +182,16 @@ def portfolio_z_spreads(
             spread_bps=spread,
             method=method,
         )
-        mod_duration, pv_value = _extract_metrics(metrics)
+        try:
+            mod_duration, pv_value = _extract_metrics(metrics)
+        except Exception as exc:
+            warnings.warn(
+                f"Failed to extract risk metrics for row '{getattr(row, 'id', '?')}' "
+                f"({type(exc).__name__}); defaulting duration to 0.",
+                RuntimeWarning,
+            )
+            mod_duration = 0.0
+            pv_value = _safe_float(getattr(metrics, "pv", 0.0))
 
         market_price = getattr(row, "clean_price", None)
         z_spread = float("nan")
