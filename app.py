@@ -1,4 +1,4 @@
-import os
+
 from datetime import date, datetime
 from typing import Dict, List, Tuple, Optional
 from urllib.parse import urlencode
@@ -6,7 +6,7 @@ from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
 import streamlit as st
-from streamlit.errors import StreamlitSecretNotFoundError
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -322,37 +322,18 @@ def _load_treasury_daily_curve(target_date: Optional[date]) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-@st.cache_data(ttl=300)
-def _load_curve_from_db(conn_str: str, sql: str) -> pd.DataFrame:
-    import sqlalchemy as sa
-
-    engine = sa.create_engine(conn_str)
-    with engine.connect() as conn:
-        return pd.read_sql_query(sql, conn)
-
-
 @st.cache_resource
 def _build_analyzer(data: pd.DataFrame, extrapolate: bool) -> YieldCurveAnalyzer:
     return YieldCurveAnalyzer(data, extrapolate=extrapolate)
 
-
-def _get_secret(key: str, default: str = "") -> str:
-    try:
-        if key in st.secrets:
-            return st.secrets[key]
-    except StreamlitSecretNotFoundError:
-        return default
-    return default
-
 # --- Data Input ---
 data_source = st.sidebar.radio(
     "Data Source",
-    options=["Sample: OIS", "Sample: Govt", "US Treasury (Daily)", "Upload CSV", "Database"],
+    options=["Sample: OIS", "Sample: Govt", "US Treasury (Daily)", "Upload CSV"],
     horizontal=False,
 )
 
 uploaded_file = None
-db_data = None
 as_of_date = None
 needs_bootstrap = False
 
@@ -391,24 +372,6 @@ elif data_source == "Upload CSV":
             data = create_sample_ois_curve()
     else:
         data = create_sample_ois_curve()
-else:
-    st.sidebar.caption("Connect to your curve database (SQLAlchemy URL required).")
-    default_conn = os.getenv("YC_DB_URL", "")
-    default_conn = _get_secret("YC_DB_URL", default_conn)
-    conn_str = st.sidebar.text_input("DB Connection URL", value=default_conn)
-    sql = st.sidebar.text_area(
-        "SQL Query",
-        value="SELECT tenor, rate FROM curves WHERE curve_id = 'USD_OIS' ORDER BY tenor",
-        height=120,
-    )
-    if st.sidebar.button("Load from DB"):
-        try:
-            db_data = _load_curve_from_db(conn_str, sql)
-            st.sidebar.success("Database data loaded.")
-        except Exception as e:
-            st.sidebar.error(f"Database load failed: {e}")
-            db_data = None
-    data = db_data if db_data is not None else create_sample_ois_curve()
 
 st.sidebar.markdown("#### Edit Market Data")
 with st.sidebar.expander("Show/Edit Data", expanded=False):
@@ -599,7 +562,7 @@ with tabs[1]:
     st.caption(f"Available curve IDs: {', '.join(curve_ids)} (default: {selected_curve_id})")
     portfolio_source = st.radio(
         "Portfolio Source",
-        options=["Sample", "Upload CSV", "Database"],
+        options=["Sample", "Upload CSV"],
         horizontal=True,
     )
 
@@ -610,22 +573,6 @@ with tabs[1]:
         portfolio_file = st.file_uploader("Upload portfolio CSV", type=["csv"])
         if portfolio_file is not None:
             portfolio_df = pd.read_csv(portfolio_file)
-    else:
-        st.caption("Load portfolio positions from DB (SQLAlchemy URL required).")
-        default_conn = os.getenv("YC_DB_URL", "")
-        default_conn = _get_secret("YC_DB_URL", default_conn)
-        port_conn = st.text_input("DB Connection URL (Portfolio)", value=default_conn)
-        port_sql = st.text_area(
-            "SQL Query (Portfolio)",
-            value="SELECT * FROM portfolio_positions ORDER BY issuer",
-            height=120,
-        )
-        if st.button("Load Portfolio from DB"):
-            try:
-                portfolio_df = _load_curve_from_db(port_conn, port_sql)
-                st.success("Portfolio loaded.")
-            except Exception as e:
-                st.error(f"Portfolio load failed: {e}")
 
     if portfolio_df is None:
         st.info("Upload or load a portfolio to see pricing and risk.")
