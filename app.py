@@ -9,8 +9,8 @@ import streamlit as st
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from yield_curve_analyzer import (
     YieldCurveAnalyzer,
@@ -56,51 +56,7 @@ _PALETTE = {
 }
 _FONT_FAMILY = "Inter"
 
-# Set matplotlib defaults globally so every chart inherits Inter
-plt.rcParams.update({
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Inter", "Helvetica Neue", "Arial", "DejaVu Sans"],
-    "axes.unicode_minus": False,
-})
-_FONT_TITLE = 11
-_FONT_LABEL = 9.5
-_FONT_TICK = 8.5
-_FONT_LEGEND = 8.5
-_FONT_ANNOTATION = 8
-_LINEWIDTH = 1.4
-_MARKER_SIZE = 4
-
-
-def _apply_style(ax, title=None, xlabel=None, ylabel=None, legend=True, grid_axis="both"):
-    """Apply unified academic finance styling to a matplotlib Axes."""
-    ax.set_facecolor(_PALETTE["bg"])
-    ax.figure.set_facecolor(_PALETTE["bg"])
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-    for spine in ["bottom", "left"]:
-        ax.spines[spine].set_color(_PALETTE["mid_gray"])
-        ax.spines[spine].set_linewidth(0.6)
-    ax.tick_params(axis="both", which="both", labelsize=_FONT_TICK, colors=_PALETTE["slate"],
-                   length=3, width=0.5)
-    ax.grid(True, axis=grid_axis, color=_PALETTE["light_gray"], linewidth=0.5, linestyle="-")
-    if title:
-        ax.set_title(title, fontsize=_FONT_TITLE, fontweight="600", color=_PALETTE["navy"],
-                     fontfamily=_FONT_FAMILY, pad=10)
-    if xlabel:
-        ax.set_xlabel(xlabel, fontsize=_FONT_LABEL, color=_PALETTE["slate"], fontfamily=_FONT_FAMILY)
-    if ylabel:
-        ax.set_ylabel(ylabel, fontsize=_FONT_LABEL, color=_PALETTE["slate"], fontfamily=_FONT_FAMILY)
-    if legend and ax.get_legend_handles_labels()[1]:
-        ax.legend(fontsize=_FONT_LEGEND, frameon=True, facecolor=_PALETTE["bg"],
-                  edgecolor=_PALETTE["light_gray"], framealpha=0.95, loc="best")
-
-
-def _new_fig(rows=1, cols=1, figsize=(10, 4.5), sharex=False):
-    """Create a figure with the finance theme pre-applied."""
-    fig, axes = plt.subplots(rows, cols, figsize=figsize, sharex=sharex,
-                             facecolor=_PALETTE["bg"])
-    return fig, axes
-
+# _PALETTE colors remain unchanged but will be used in plotly graphs
 
 # =============================================================================
 # TREASURY DATA CONFIG
@@ -476,28 +432,34 @@ with tabs[0]:
     with col1:
         st.subheader("Yield Curve: Zero vs. Forward Rates")
 
-        fig1, (ax1, ax2) = _new_fig(rows=2, cols=1, figsize=(10, 7), sharex=True)
-
         t_grid = np.linspace(analyzer.tenors.min(), analyzer.tenors.max(), plot_resolution)
+
+        fig1 = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                             subplot_titles=(f"Zero Coupon Curve — {interpolation_method.value.title()}", 
+                                             f"Instantaneous Forward Curve — {interpolation_method.value.title()}"),
+                             vertical_spacing=0.1)
 
         # Zero curve
         zero_rates = analyzer.get_zero_rate(t_grid, method=interpolation_method)
-        ax1.plot(t_grid, zero_rates, color=_PALETTE["blue"], linewidth=_LINEWIDTH,
-                 label=f"{interpolation_method.value.title()} Zero Curve")
-        ax1.scatter(analyzer.tenors, analyzer.rates, color=_PALETTE["navy"], zorder=5,
-                    label="Market Data", marker="o", s=_MARKER_SIZE**2, linewidths=0.5, edgecolors="white")
-        _apply_style(ax1, title=f"Zero Coupon Curve — {interpolation_method.value.title()}",
-                     ylabel="Rate (%)", grid_axis="y")
+        fig1.add_trace(go.Scatter(x=t_grid, y=zero_rates, mode="lines", 
+                                  line=dict(color=_PALETTE["blue"], width=2),
+                                  name=f"{interpolation_method.value.title()} Zero Curve"), row=1, col=1)
+        fig1.add_trace(go.Scatter(x=analyzer.tenors, y=analyzer.rates, mode="markers", 
+                                  marker=dict(color=_PALETTE["navy"], size=8, line=dict(color="white", width=1)),
+                                  name="Market Data"), row=1, col=1)
 
         # Forward curve
         forward_rates = analyzer.get_forward_rate(t_grid, method=interpolation_method)
-        ax2.plot(t_grid, forward_rates, color=_PALETTE["orange"], linewidth=_LINEWIDTH,
-                 label=f"{interpolation_method.value.title()} Forward Curve")
-        _apply_style(ax2, title=f"Instantaneous Forward Curve — {interpolation_method.value.title()}",
-                     xlabel="Maturity (Years)", ylabel="Rate (%)", grid_axis="y")
+        fig1.add_trace(go.Scatter(x=t_grid, y=forward_rates, mode="lines", 
+                                  line=dict(color=_PALETTE["orange"], width=2),
+                                  name=f"{interpolation_method.value.title()} Forward Curve"), row=2, col=1)
 
-        fig1.tight_layout(h_pad=2.5)
-        st.pyplot(fig1)
+        fig1.update_layout(height=600, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20),
+                           hovermode="x unified", legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+        fig1.update_yaxes(title_text="Rate (%)", row=1, col=1)
+        fig1.update_yaxes(title_text="Rate (%)", row=2, col=1)
+        fig1.update_xaxes(title_text="Maturity (Years)", row=2, col=1)
+        st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
         st.subheader(f"Stress Test: {shock_bps:+.0f} bps at {shock_maturity}Y")
@@ -508,20 +470,21 @@ with tabs[0]:
         )
         deltas_df = stress_results["deltas"]
 
-        fig2, ax = _new_fig(figsize=(10, 4))
-        ax.plot(deltas_df["Maturity"], deltas_df["Delta_Cubic_bps"],
-                color=_PALETTE["slate"], linewidth=1.0, linestyle="--",
-                label="Cubic Spline Δ", alpha=0.7)
-        ax.plot(deltas_df["Maturity"], deltas_df["Delta_PCHIP_bps"],
-                color=_PALETTE["teal"], linewidth=_LINEWIDTH, label="PCHIP Δ")
-        ax.axvline(shock_maturity, color=_PALETTE["red"], linewidth=0.8, linestyle=":",
-                   label=f"Shock Point ({shock_maturity}Y)", alpha=0.6)
-        ax.axhline(0, color=_PALETTE["mid_gray"], linewidth=0.4)
-        ax.fill_between(deltas_df["Maturity"], deltas_df["Delta_PCHIP_bps"], 0,
-                        color=_PALETTE["teal"], alpha=0.08)
-        _apply_style(ax, title="Curve Impact of Shock (Δ Zero Rate)",
-                     xlabel="Maturity (Years)", ylabel="Impact (bps)", grid_axis="y")
-        st.pyplot(fig2)
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=deltas_df["Maturity"], y=deltas_df["Delta_Cubic_bps"],
+                                  mode="lines", line=dict(color=_PALETTE["slate"], width=1.5, dash="dash"),
+                                  name="Cubic Spline Δ", opacity=0.7))
+        fig2.add_trace(go.Scatter(x=deltas_df["Maturity"], y=deltas_df["Delta_PCHIP_bps"],
+                                  mode="lines", fill="tozeroy", fillcolor=f"rgba(13, 148, 136, 0.1)",
+                                  line=dict(color=_PALETTE["teal"], width=2), name="PCHIP Δ"))
+        fig2.add_vline(x=shock_maturity, line_color=_PALETTE["red"], line_width=1.5, line_dash="dot",
+                       annotation_text=f"Shock Point ({shock_maturity}Y)", annotation_position="top right")
+        fig2.add_hline(y=0, line_color=_PALETTE["mid_gray"], line_width=1)
+        
+        fig2.update_layout(title="Curve Impact of Shock (Δ Zero Rate)", height=350,
+                           xaxis_title="Maturity (Years)", yaxis_title="Impact (bps)",
+                           template="plotly_white", margin=dict(l=20, r=20, t=40, b=20), hovermode="x unified")
+        st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("""
         **PCHIP** localises the shock around the target tenor — preferred for risk management.  
@@ -689,23 +652,36 @@ with tabs[2]:
                               f"{ann_return_bps:,.0f}")
 
         # Chart
-        fig, ax = _new_fig(figsize=(10, 5))
         carry_results_sorted = carry_results.sort_values("total_return_ann_bps", ascending=True)
-        y_pos = np.arange(len(carry_results_sorted))
 
-        ax.barh(y_pos, carry_results_sorted["carry_ann_bps"],
-                height=0.6, label="Carry", color=_PALETTE["blue"], alpha=0.85)
-        ax.barh(y_pos, carry_results_sorted["rolldown_ann_bps"],
-                left=carry_results_sorted["carry_ann_bps"],
-                height=0.6, label="Roll-Down", color=_PALETTE["orange"], alpha=0.85)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            y=carry_results_sorted["id"],
+            x=carry_results_sorted["carry_ann_bps"],
+            name="Carry",
+            orientation="h",
+            marker=dict(color=_PALETTE["blue"], opacity=0.85)
+        ))
+        fig.add_trace(go.Bar(
+            y=carry_results_sorted["id"],
+            x=carry_results_sorted["rolldown_ann_bps"],
+            name="Roll-Down",
+            orientation="h",
+            marker=dict(color=_PALETTE["orange"], opacity=0.85)
+        ))
 
-        ax.set_yticks(y_pos)
-        ax.set_yticklabels(carry_results_sorted["id"], fontsize=_FONT_TICK)
-        ax.axvline(0, color=_PALETTE["mid_gray"], linewidth=0.5)
-        _apply_style(ax, title=f"{horizon_months}M Carry + Roll-Down by Bond",
-                     xlabel="Annualized Return (bps)", grid_axis="x")
-        fig.tight_layout()
-        st.pyplot(fig)
+        fig.update_layout(
+            title=f"{horizon_months}M Carry + Roll-Down by Bond",
+            barmode="stack",
+            xaxis_title="Annualized Return (bps)",
+            height=450,
+            template="plotly_white",
+            margin=dict(l=20, r=20, t=40, b=20),
+            hovermode="y unified"
+        )
+        # add zero line
+        fig.add_vline(x=0, line_color=_PALETTE["mid_gray"], line_width=1)
+        st.plotly_chart(fig, use_container_width=True)
 
 # =============================================================================
 # TAB 3: DV01 LADDER
@@ -755,16 +731,23 @@ with tabs[3]:
             )
 
         # Chart
-        fig, ax = _new_fig(figsize=(10, 4.5))
-        bars = ax.barh(ladder_df["bucket"], ladder_df["pct_of_total"],
-                       height=0.55, color=_PALETTE["navy"], alpha=0.85)
-        for i, (bucket, pct) in enumerate(zip(ladder_df["bucket"], ladder_df["pct_of_total"])):
-            ax.text(pct + 0.8, i, f"{pct:.1f}%", va="center", fontsize=_FONT_ANNOTATION,
-                    color=_PALETTE["slate"])
-        _apply_style(ax, title="Portfolio Curve Exposure (DV01 Distribution)",
-                     xlabel="% of Total DV01", grid_axis="x")
-        fig.tight_layout()
-        st.pyplot(fig)
+        fig = go.Figure(go.Bar(
+            y=ladder_df["bucket"],
+            x=ladder_df["pct_of_total"],
+            orientation="h",
+            marker=dict(color=_PALETTE["navy"], opacity=0.85),
+            text=[f"{pct:.1f}%" for pct in ladder_df["pct_of_total"]],
+            textposition="outside"
+        ))
+        
+        fig.update_layout(
+            title="Portfolio Curve Exposure (DV01 Distribution)",
+            xaxis_title="% of Total DV01",
+            height=400,
+            template="plotly_white",
+            margin=dict(l=20, r=40, t=40, b=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 # =============================================================================
 # TAB 4: PCA ANALYSIS
@@ -838,28 +821,46 @@ with tabs[4]:
             st.markdown(interpretation)
 
         # DV01 by tenor
-        fig, ax = _new_fig(figsize=(10, 4.5))
         tenor_labels = [f"{t}Y" for t in pca_tenors]
-        ax.bar(tenor_labels, [dv01_by_tenor[t] for t in pca_tenors],
-               color=_PALETTE["blue"], alpha=0.85, width=0.6)
-        _apply_style(ax, title="Portfolio DV01 Mapped to PCA Tenor Buckets",
-                     xlabel="Tenor", ylabel="DV01 ($)", grid_axis="y")
-        fig.tight_layout()
-        st.pyplot(fig)
+        fig = go.Figure(go.Bar(
+            x=tenor_labels,
+            y=[dv01_by_tenor[t] for t in pca_tenors],
+            marker=dict(color=_PALETTE["blue"], opacity=0.85),
+            width=0.6
+        ))
+        fig.update_layout(
+            title="Portfolio DV01 Mapped to PCA Tenor Buckets",
+            xaxis_title="Tenor",
+            yaxis_title="DV01 ($)",
+            height=400,
+            template="plotly_white",
+            margin=dict(l=20, r=20, t=40, b=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
         # PCA loadings
-        fig2, ax2 = _new_fig(figsize=(10, 4.5))
-        ax2.plot(tenor_labels, pca_loadings["level"], color=_PALETTE["navy"],
-                 marker="o", markersize=_MARKER_SIZE, linewidth=_LINEWIDTH, label="Level (PC1)")
-        ax2.plot(tenor_labels, pca_loadings["slope"], color=_PALETTE["red"],
-                 marker="s", markersize=_MARKER_SIZE, linewidth=_LINEWIDTH, label="Slope (PC2)")
-        ax2.plot(tenor_labels, pca_loadings["curvature"], color=_PALETTE["teal"],
-                 marker="^", markersize=_MARKER_SIZE, linewidth=_LINEWIDTH, label="Curvature (PC3)")
-        ax2.axhline(0, color=_PALETTE["mid_gray"], linewidth=0.4)
-        _apply_style(ax2, title="PCA Factor Loadings — Stylized USD Rates",
-                     xlabel="Tenor", ylabel="Loading")
-        fig2.tight_layout()
-        st.pyplot(fig2)
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=tenor_labels, y=pca_loadings["level"], mode="lines+markers",
+                                  marker=dict(symbol="circle", size=8), line=dict(color=_PALETTE["navy"], width=2),
+                                  name="Level (PC1)"))
+        fig2.add_trace(go.Scatter(x=tenor_labels, y=pca_loadings["slope"], mode="lines+markers",
+                                  marker=dict(symbol="square", size=8), line=dict(color=_PALETTE["red"], width=2),
+                                  name="Slope (PC2)"))
+        fig2.add_trace(go.Scatter(x=tenor_labels, y=pca_loadings["curvature"], mode="lines+markers",
+                                  marker=dict(symbol="triangle-up", size=8), line=dict(color=_PALETTE["teal"], width=2),
+                                  name="Curvature (PC3)"))
+        fig2.add_hline(y=0, line_color=_PALETTE["mid_gray"], line_width=1)
+        
+        fig2.update_layout(
+            title="PCA Factor Loadings — Stylized USD Rates",
+            xaxis_title="Tenor",
+            yaxis_title="Loading",
+            height=400,
+            template="plotly_white",
+            margin=dict(l=20, r=20, t=40, b=20),
+            hovermode="x unified"
+        )
+        st.plotly_chart(fig2, use_container_width=True)
 
 # =============================================================================
 # TAB 5: RELATIVE VALUE
@@ -906,36 +907,50 @@ with tabs[5]:
             )
 
             # Scatter plot
-            fig, ax = _new_fig(figsize=(10, 5))
+            fig = go.Figure()
 
             cheap = rv_display[rv_display["signal"] == "CHEAP"]
             fair = rv_display[rv_display["signal"] == "FAIR"]
             rich = rv_display[rv_display["signal"] == "RICH"]
 
-            if len(cheap) > 0:
-                ax.scatter(cheap["duration"], cheap["z_spread_bps"],
-                          color=_PALETTE["green"], s=60, label="CHEAP", alpha=0.85,
-                          edgecolors="white", linewidths=0.6, zorder=3)
-            if len(fair) > 0:
-                ax.scatter(fair["duration"], fair["z_spread_bps"],
-                          color=_PALETTE["slate"], s=60, label="FAIR", alpha=0.7,
-                          edgecolors="white", linewidths=0.6, zorder=3)
-            if len(rich) > 0:
-                ax.scatter(rich["duration"], rich["z_spread_bps"],
-                          color=_PALETTE["red"], s=60, label="RICH", alpha=0.85,
-                          edgecolors="white", linewidths=0.6, zorder=3)
+            def add_scatter_trace(data, name, color):
+                if len(data) > 0:
+                    fig.add_trace(go.Scatter(
+                        x=data["duration"],
+                        y=data["z_spread_bps"],
+                        mode="markers",
+                        name=name,
+                        text=data["id"],
+                        hovertemplate="<b>%{text}</b><br>Duration: %{x:.2f}<br>Z-Spread: %{y:.1f} bps<extra></extra>",
+                        marker=dict(color=color, size=10, line=dict(color="white", width=1), opacity=0.8)
+                    ))
+
+            add_scatter_trace(cheap, "CHEAP", _PALETTE["green"])
+            add_scatter_trace(fair, "FAIR", _PALETTE["slate"])
+            add_scatter_trace(rich, "RICH", _PALETTE["red"])
 
             valid_for_fit = rv_display.dropna(subset=["z_spread_bps", "fitted_spread"])
             if len(valid_for_fit) >= 2:
                 dur_sorted = np.sort(valid_for_fit["duration"].values)
                 fitted_sorted = valid_for_fit.set_index("duration").loc[dur_sorted, "fitted_spread"].values
-                ax.plot(dur_sorted, fitted_sorted, color=_PALETTE["navy"],
-                        linewidth=1.2, linestyle="--", label="Fitted Spread (OLS)", alpha=0.7)
+                fig.add_trace(go.Scatter(
+                    x=dur_sorted,
+                    y=fitted_sorted,
+                    mode="lines",
+                    name="Fitted Spread (OLS)",
+                    line=dict(color=_PALETTE["navy"], width=2, dash="dash"),
+                    opacity=0.7
+                ))
 
-            _apply_style(ax, title="Z-Spread vs. Duration — Rich/Cheap Signals",
-                         xlabel="Modified Duration", ylabel="Z-Spread (bps)")
-            fig.tight_layout()
-            st.pyplot(fig)
+            fig.update_layout(
+                title="Z-Spread vs. Duration — Rich/Cheap Signals",
+                xaxis_title="Modified Duration",
+                yaxis_title="Z-Spread (bps)",
+                height=450,
+                template="plotly_white",
+                margin=dict(l=20, r=20, t=40, b=20),
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
 # =============================================================================
 # TAB 6: HISTORICAL STRESS
@@ -1156,32 +1171,28 @@ with tabs[8]:
             attrib["carry"], attrib["rolldown"], attrib["rate_move"],
             attrib["spread_move"], attrib["residual"],
         ]
+        
+        fig = go.Figure(go.Waterfall(
+            name="P&L Attribution", orientation="v",
+            measure=["relative"] * len(components) + ["total"],
+            x=components + ["Total"],
+            textposition="outside",
+            text=[f"${v:,.0f}" for v in values] + [f"${sum(values):,.0f}"],
+            y=values + [sum(values)],
+            connector={"line": {"color": _PALETTE["mid_gray"]}},
+            decreasing={"marker": {"color": _PALETTE["red"]}},
+            increasing={"marker": {"color": _PALETTE["green"]}},
+            totals={"marker": {"color": _PALETTE["navy"]}}
+        ))
 
-        fig, ax = _new_fig(figsize=(10, 5))
-        cumulative = np.cumsum([0.0] + values[:-1])
-        bar_colors = [_PALETTE["green"] if v >= 0 else _PALETTE["red"] for v in values]
-
-        ax.bar(components, values, bottom=cumulative, color=bar_colors,
-               width=0.55, alpha=0.85, edgecolor="white", linewidth=0.6)
-        ax.axhline(0, color=_PALETTE["mid_gray"], linewidth=0.4)
-
-        # Total bar
-        total_val = sum(values)
-        total_color = _PALETTE["navy"]
-        ax.bar("Total", total_val, color=total_color, width=0.55, alpha=0.9,
-               edgecolor="white", linewidth=0.6)
-
-        for i, val in enumerate(values):
-            ax.text(i, cumulative[i] + val / 2, f"${val:,.0f}",
-                    ha="center", va="center", fontsize=_FONT_ANNOTATION, color="white",
-                    fontweight="600")
-        ax.text(len(components), total_val / 2, f"${total_val:,.0f}",
-                ha="center", va="center", fontsize=_FONT_ANNOTATION, color="white",
-                fontweight="bold")
-
-        _apply_style(ax, title="P&L Attribution Waterfall", ylabel="P&L ($)", grid_axis="y")
-        fig.tight_layout()
-        st.pyplot(fig)
+        fig.update_layout(
+            title="P&L Attribution Waterfall",
+            yaxis_title="P&L ($)",
+            height=500,
+            template="plotly_white",
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 # =============================================================================
 # TAB 9: DOCUMENTATION
