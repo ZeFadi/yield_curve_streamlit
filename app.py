@@ -443,19 +443,24 @@ with tabs[0]:
         zero_rates = analyzer.get_zero_rate(t_grid, method=interpolation_method)
         fig1.add_trace(go.Scatter(x=t_grid, y=zero_rates, mode="lines", 
                                   line=dict(color=_PALETTE["blue"], width=2),
-                                  name=f"{interpolation_method.value.title()} Zero Curve"), row=1, col=1)
+                                  name=f"{interpolation_method.value.title()} Zero Curve",
+                                  hovertemplate="Maturity: %{x:.2f}Y<br>Rate: %{y:.3f}%<extra></extra>"), row=1, col=1)
         fig1.add_trace(go.Scatter(x=analyzer.tenors, y=analyzer.rates, mode="markers", 
                                   marker=dict(color=_PALETTE["navy"], size=8, line=dict(color="white", width=1)),
-                                  name="Market Data"), row=1, col=1)
+                                  name="Market Data",
+                                  hovertemplate="Maturity: %{x:.2f}Y<br>Rate: %{y:.3f}%<extra></extra>"), row=1, col=1)
 
         # Forward curve
         forward_rates = analyzer.get_forward_rate(t_grid, method=interpolation_method)
         fig1.add_trace(go.Scatter(x=t_grid, y=forward_rates, mode="lines", 
                                   line=dict(color=_PALETTE["orange"], width=2),
-                                  name=f"{interpolation_method.value.title()} Forward Curve"), row=2, col=1)
+                                  name=f"{interpolation_method.value.title()} Forward Curve",
+                                  hovertemplate="Maturity: %{x:.2f}Y<br>Rate: %{y:.3f}%<extra></extra>"), row=2, col=1)
 
         fig1.update_layout(height=600, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20),
-                           hovermode="x unified", legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+                           hovermode="closest", legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
+        fig1.update_xaxes(showspikes=True, spikemode="across", spikedash="dot", spikecolor=_PALETTE["slate"], spikethickness=1)
+        fig1.update_yaxes(showspikes=True, spikemode="across", spikedash="dot", spikecolor=_PALETTE["slate"], spikethickness=1)
         fig1.update_yaxes(title_text="Rate (%)", row=1, col=1)
         fig1.update_yaxes(title_text="Rate (%)", row=2, col=1)
         fig1.update_xaxes(title_text="Maturity (Years)", row=2, col=1)
@@ -473,17 +478,21 @@ with tabs[0]:
         fig2 = go.Figure()
         fig2.add_trace(go.Scatter(x=deltas_df["Maturity"], y=deltas_df["Delta_Cubic_bps"],
                                   mode="lines", line=dict(color=_PALETTE["slate"], width=1.5, dash="dash"),
-                                  name="Cubic Spline Δ", opacity=0.7))
+                                  name="Cubic Spline Δ", opacity=0.7,
+                                  hovertemplate="Maturity: %{x:.2f}Y<br>Impact: %{y:.1f} bps<extra></extra>"))
         fig2.add_trace(go.Scatter(x=deltas_df["Maturity"], y=deltas_df["Delta_PCHIP_bps"],
                                   mode="lines", fill="tozeroy", fillcolor=f"rgba(13, 148, 136, 0.1)",
-                                  line=dict(color=_PALETTE["teal"], width=2), name="PCHIP Δ"))
+                                  line=dict(color=_PALETTE["teal"], width=2), name="PCHIP Δ",
+                                  hovertemplate="Maturity: %{x:.2f}Y<br>Impact: %{y:.1f} bps<extra></extra>"))
         fig2.add_vline(x=shock_maturity, line_color=_PALETTE["red"], line_width=1.5, line_dash="dot",
                        annotation_text=f"Shock Point ({shock_maturity}Y)", annotation_position="top right")
         fig2.add_hline(y=0, line_color=_PALETTE["mid_gray"], line_width=1)
         
+        fig2.update_xaxes(showspikes=True, spikemode="across", spikedash="dot", spikecolor=_PALETTE["slate"], spikethickness=1)
+        fig2.update_yaxes(showspikes=True, spikemode="across", spikedash="dot", spikecolor=_PALETTE["slate"], spikethickness=1)
         fig2.update_layout(title="Curve Impact of Shock (Δ Zero Rate)", height=350,
                            xaxis_title="Maturity (Years)", yaxis_title="Impact (bps)",
-                           template="plotly_white", margin=dict(l=20, r=20, t=40, b=20), hovermode="x unified")
+                           template="plotly_white", margin=dict(l=20, r=20, t=40, b=20), hovermode="closest")
         st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("""
