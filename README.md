@@ -20,6 +20,26 @@ This application implements a coherent fixed-income analytics stack centered on:
 
 The design objective is **internal consistency**: formulas, variable naming, and tab outputs follow the same modeling conventions across the full app.
 
+## Application Overview / Screenshots
+
+If you are unable to run the application locally, below are some screenshots demonstrating its key features:
+
+### Yield Curves and Stress Testing
+![Yield Curves](assets/app_curves.png)
+
+### Portfolio Risk Metrics and Valuation
+![Portfolio Valuation](assets/app_portfolio.png)
+
+### Expected Carry & Roll-Down Analysis
+![Carry and Roll-Down](assets/app_carry_rolldown.png)
+
+### PCA Analysis
+![PCA Analysis](assets/app_PCA.png)
+
+
+### P&L Attribution
+![P&L Attribution](assets/app_pnl.png)
+
 ---
 
 ## Mathematical Foundations
