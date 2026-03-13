@@ -36,10 +36,6 @@ If you are unable to run the application locally, below are some screenshots dem
 ### PCA Analysis
 ![PCA Analysis](assets/app_PCA.png)
 
-
-### P&L Attribution
-![P&L Attribution](assets/app_pnl.png)
-
 ---
 
 ## Mathematical Foundations
