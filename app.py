@@ -1068,7 +1068,7 @@ with tabs[7]:
             shocker = shockers.get(name)
             if shocker is None:
                 return None
-            shocked_curve_df = cleaned_data.groupby("curve_id", group_keys=False).apply(shocker)
+            shocked_curve_df = cleaned_data.groupby("curve_id", group_keys=False).apply(shocker).reset_index(drop=True)
             return {
                 cid: _build_analyzer(group[["tenor", "rate"]], extrapolate=extrapolate)
                 for cid, group in shocked_curve_df.groupby("curve_id")
@@ -1136,6 +1136,7 @@ with tabs[8]:
         t1_curve_df = (
             cleaned_data.groupby("curve_id", group_keys=False)
             .apply(lambda df: apply_parallel_shock(df, rate_change_bps))
+            .reset_index(drop=True)
         )
         t1_curve_map = {
             cid: _build_analyzer(group[["tenor", "rate"]], extrapolate=extrapolate)
